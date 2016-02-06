@@ -103,6 +103,7 @@ boot(void)
 
 	kprintf("Baba's system version %s (%s #%d)\n",
 		GROUP_VERSION, buildconfig, buildversion);
+	kprintf("expletives !!");
 	kprintf("\n");
 
 	/* Early initialization. */
