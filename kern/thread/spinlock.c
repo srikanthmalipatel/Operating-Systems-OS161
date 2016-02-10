@@ -56,6 +56,7 @@ spinlock_init(struct spinlock *splk)
 
 /*
  * Clean up spinlock.
+ * QUESTIONS* why clean up only when there is no cpu holding it and splk_lock = 0
  */
 void
 spinlock_cleanup(struct spinlock *splk)
