@@ -32,7 +32,7 @@
  */
 
 
-//Anirudh
+//Anirudh Reddy
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/reboot.h>
