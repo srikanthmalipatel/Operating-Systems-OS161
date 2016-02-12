@@ -317,3 +317,93 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 
 }
 
+//RW
+
+struct rwlock * rwlock_create(const char *name)
+{
+
+	struct rwlock  *rw;
+
+	rw = kmalloc(sizeof(*rw));
+	if (rw == NULL) {
+		return NULL;
+	}
+
+	rw->rwlock_name = kstrdup(name);
+	if (rw->rwlock_name==NULL) {
+		kfree(rw);
+		return NULL;
+	}
+
+	rw->rwlock_read_wchan = wchan_create(rw->rwlock_name);
+	if (rw->rwlock_read_wchan == NULL) {
+		kfree(rw->rwlock_name);
+		kfree(rw);
+		return NULL;
+	}
+
+	rw->rwlock_write_wchan = wchan_create(rw->rwlock_name);
+	if (rw->rwlock_write_wchan == NULL) {
+		kfree(rw->rwlock_name);
+		kfree(rw);
+		return NULL;
+	}
+	
+	spinlock_init(&rw->rwlock_spinlock);
+	rw->rwlock_next_thread = NONE;
+	rw->rwlock_readers_count = 0;
+
+	return rw;
+
+
+}
+
+void rwlock_destroy(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	spinlock_cleanup(&rwlock->rwlock_spinlock);
+	wchan_destroy(rwlock->rwlock_read_wchan);
+	wchan_destroy(rwlock->rwlock_write_wchan);
+	kfree(rwlock->rwlock_name);
+	kfree(rwlock);
+
+}
+
+void rwlock_acquire_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+
+
+
+
+}
+
+void rwlock_release_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+
+
+
+
+}
+
+void rwlock_acquire_write(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+
+
+}
+
+void rwlock_release_write(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+
+
+
+
+}

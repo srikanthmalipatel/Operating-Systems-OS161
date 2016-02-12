@@ -153,9 +153,22 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * The name field is for easier debugging. A copy of the name is
  * (should be) made internally.
  */
+typedef enum
+{
+	NONE,
+	READER,
+	WRITER
+
+}thread_type;
+
 
 struct rwlock {
         char *rwlock_name;
+        struct spinlock rwlock_spinlock;
+        struct wchan *rwlock_read_wchan;
+        struct wchan *rwlock_write_wchan;
+        volatile int rwlock_readers_count;
+		thread_type rwlock_next_thread;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
