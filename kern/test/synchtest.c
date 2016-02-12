@@ -302,6 +302,7 @@ locktest2(int nargs, char **args) {
 			panic("lt2: lock_create failed\n");
 		}
 		if (i != CREATELOOPS - 1) {
+			kprintf(" destroying lock %d\n", i); 
 			lock_destroy(testlock);
 		}
 	}

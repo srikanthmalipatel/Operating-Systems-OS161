@@ -173,7 +173,7 @@ void
 lock_destroy(struct lock *lock)
 {
 	KASSERT(lock != NULL);
-
+    KASSERT(lock_do_i_hold(lock) == false);
 	// add stuff here as needed
     lock->lk_curthread = NULL;
 	spinlock_cleanup(&lock->lk_spinlock);
@@ -208,6 +208,7 @@ lock_release(struct lock *lock)
 {
 	// Write this
     KASSERT(lock != NULL);
+    KASSERT(lock_do_i_hold(lock) == true);
     spinlock_acquire(&lock->lk_spinlock);
     lock->lk_isheld = false;
     lock->lk_curthread = NULL;
