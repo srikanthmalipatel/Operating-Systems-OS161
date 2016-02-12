@@ -285,9 +285,8 @@ cv_wait(struct cv *cv, struct lock *lock)
 	lock_release(lock);
 	wchan_sleep(cv->cv_wchan, &cv->cv_spinlock);
 	spinlock_release(&cv->cv_spinlock);
-
-//	(void)cv;    // suppress warning until code gets written
-//	(void)lock;  // suppress warning until code gets written
+	lock_acquire(lock); // acquiring lock after releaseing cv_spinlock as cpu can hold only one spinlock at a time, Also this is correct as the thread should continue running
+						// immediately after waking up
 }
 
 void
@@ -301,8 +300,6 @@ cv_signal(struct cv *cv, struct lock *lock)
     spinlock_acquire(&cv->cv_spinlock);
     wchan_wakeone(cv->cv_wchan, &cv->cv_spinlock);
     spinlock_release(&cv->cv_spinlock);
-	//(void)cv;    // suppress warning until code gets written
-	//(void)lock;  // suppress warning until code gets written
 }
 
 void
@@ -312,9 +309,10 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	KASSERT(cv != NULL);
 	KASSERT(lock != NULL);
 	KASSERT(lock_do_i_hold(lock) == true);     
+
 	spinlock_acquire(&cv->cv_spinlock);
 	wchan_wakeall(cv->cv_wchan, &cv->cv_spinlock);
 	spinlock_release(&cv->cv_spinlock);
-//	(void)cv;    // suppress warning until code gets written
-//	(void)lock;  // suppress warning until code gets written
+
 }
+
