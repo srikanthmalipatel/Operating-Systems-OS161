@@ -169,12 +169,17 @@ struct rwlock {
         struct wchan *rwlock_write_wchan;
         volatile int rwlock_readers_count;
 		thread_type rwlock_next_thread;
+		struct thread* rwlock_curthread;
+		struct threadlist* readers_list;
+		bool is_held_by_writer;
+		struct lock *rwlock_write_lock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
 
 struct rwlock * rwlock_create(const char *);
 void rwlock_destroy(struct rwlock *);
+bool rwlock_do_i_hold(struct rwlock*);
 
 /*
  * Operations:
