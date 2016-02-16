@@ -44,7 +44,24 @@
  * Called by the driver during initialization.
  */
 
+
+static uint32_t male_count;
+static struct lock *commonLock;
+static uint32_t female_count;
+static uint32_t matchmaker_count;
+static struct cv *cv_male;
+static struct cv *cv_female;
+static struct cv *cv_matchmaker;
+
 void whalemating_init() {
+	commonLock = lock_create("commonLock");
+	cv_male = cv_create("male cv");
+	cv_female = cv_create("female cv");
+	cv_matchmaker = cv_create("matchmaker cv");
+
+	male_count = 0;
+	female_count = 0;
+	matchmaker_count = 0;
 	return;
 }
 
@@ -54,38 +71,109 @@ void whalemating_init() {
 
 void
 whalemating_cleanup() {
+	lock_destroy(commonLock);
+	cv_destroy(cv_male);
+	cv_destroy(cv_female);
+	cv_destroy(cv_matchmaker);
 	return;
 }
 
 void
 male(uint32_t index)
 {
-	(void)index;
+//	(void)index;
 	/*
 	 * Implement this function by calling male_start and male_end when
 	 * appropriate.
 	 */
+	male_start(index);
+	lock_acquire(commonLock);
+	male_count++;
+
+	if(female_count > 0 && matchmaker_count > 0)
+	{
+		female_count--;
+		matchmaker_count--;
+		male_count--;
+
+		cv_signal(cv_female,commonLock);
+		cv_signal(cv_matchmaker,commonLock);
+	
+	
+	}
+	else
+	{
+		cv_wait(cv_male,commonLock);
+	
+	}
+	male_end(index);
+	lock_release(commonLock);
 	return;
 }
 
 void
 female(uint32_t index)
 {
-	(void)index;
+//	(void)index;
 	/*
 	 * Implement this function by calling female_start and female_end when
 	 * appropriate.
 	 */
+
+	 female_start(index);
+	 lock_acquire(commonLock);
+	 female_count++;
+	 
+	 if(male_count > 0 && matchmaker_count > 0)
+	 {
+	 	male_count--;
+	 	female_count--;
+	 	matchmaker_count --;
+
+	 	cv_signal(cv_male,commonLock);
+	 	cv_signal(cv_matchmaker,commonLock);
+	 
+	 }
+	 else
+	 {
+	 	cv_wait(cv_female,commonLock);
+	 
+	 
+	 }
+	 female_end(index);
+	 lock_release(commonLock);
 	return;
 }
 
 void
 matchmaker(uint32_t index)
 {
-	(void)index;
+//	(void)index;
 	/*
 	 * Implement this function by calling matchmaker_start and matchmaker_end
 	 * when appropriate.
 	 */
+
+	 matchmaker_start(index);
+
+	 lock_acquire(commonLock);
+	 matchmaker_count++;
+
+	 if(male_count > 0 && female_count > 0)
+	 {
+	 	male_count--;
+	 	female_count--;
+	 	matchmaker_count--;
+
+	 	cv_signal(cv_male,commonLock);
+	 	cv_signal(cv_female,commonLock);
+	 
+	 }
+	 else
+	 {
+	 	cv_wait(cv_matchmaker,commonLock);
+	 }
+	matchmaker_end(index);
+	 lock_release(commonLock);
 	return;
 }
