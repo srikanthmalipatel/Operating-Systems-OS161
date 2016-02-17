@@ -317,3 +317,187 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 
 }
 
+//RW
+
+struct rwlock * rwlock_create(const char *name)
+{
+
+	struct rwlock  *rw;
+
+	rw = kmalloc(sizeof(*rw));
+	if (rw == NULL) {
+		return NULL;
+	}
+
+	rw->rwlock_name = kstrdup(name);
+	if (rw->rwlock_name==NULL) {
+		kfree(rw);
+		return NULL;
+	}
+
+	rw->rwlock_read_wchan = wchan_create(rw->rwlock_name);
+	if (rw->rwlock_read_wchan == NULL) {
+		kfree(rw->rwlock_name);
+		kfree(rw);
+		return NULL;
+	}
+
+	rw->rwlock_write_wchan = wchan_create(rw->rwlock_name);
+	if (rw->rwlock_write_wchan == NULL) {
+		kfree(rw->rwlock_name);
+		kfree(rw);
+		return NULL;
+	}
+
+	rw->rwlock_write_lock = lock_create(name);
+	spinlock_init(&rw->rwlock_spinlock);
+	rw->rwlock_next_thread = NONE;
+	rw->rwlock_readers_count = 0;
+	rw->is_held_by_writer = false;
+	threadlist_init(rw->readers_list);
+	return rw;
+
+
+}
+
+bool rwlock_do_i_hold(struct rwlock* rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	return (rwlock->rwlock_curthread == curthread);
+
+}
+void rwlock_destroy(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	spinlock_cleanup(&rwlock->rwlock_spinlock);
+	wchan_destroy(rwlock->rwlock_read_wchan);
+	wchan_destroy(rwlock->rwlock_write_wchan);
+	lock_destroy(rwlock->rwlock_write_lock);
+	threadlist_cleanup(rwlock->readers_list);
+	kfree(rwlock->rwlock_name);
+	kfree(rwlock);
+
+}
+
+void rwlock_acquire_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+	KASSERT(curthread->t_in_interrupt == false);
+	KASSERT(rwlock_do_i_hold(rwlock) == false);
+
+	spinlock_acquire(&rwlock->rwlock_spinlock);
+	// wait if a writer is in the critical section. or.. if a writer which acquired the lock before the current thread is waiting to be executed.
+	while(rwlock->is_held_by_writer == true ||!wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock) )
+		wchan_sleep(rwlock->rwlock_read_wchan, & rwlock->rwlock_spinlock);
+
+	KASSERT(rwlock->is_held_by_writer == false);
+	threadlist_addhead(rwlock->readers_list, curthread);
+
+	spinlock_release(&rwlock->rwlock_spinlock);
+
+
+}
+
+void rwlock_release_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+//	KASSERT(rwlock_do_i_hold(rwlock) == false);
+// How do we check if the thread that is calling this function has indeed called acquire. Create a readers list?
+	spinlock_acquire(&rwlock->rwlock_spinlock);
+	if(rwlock->readers_list->tl_count == 1)
+	{
+		//this is the last thread in the readers list, wake up the writer
+		if(!wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock))
+		{
+			wchan_wakeone(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+			 spinlock_release(&rwlock->rwlock_spinlock);
+			 return;
+		}
+	
+	}
+	
+	// if reached here, then there is no writer in the wait chan or there are other readers in the critical section, safe to wake up all sleeping read threads
+	if(!wchan_isempty(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock))
+		wchan_wakeall(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock);
+	threadlist_remove(rwlock->readers_list,curthread);
+	spinlock_release(&rwlock->rwlock_spinlock);
+
+
+
+}
+
+void rwlock_acquire_write(struct rwlock *rwlock)
+{
+	
+    KASSERT(curthread->t_in_interrupt == false);
+
+    KASSERT(rwlock != NULL);
+	KASSERT(rwlock_do_i_hold(rwlock) == false);
+    
+	spinlock_acquire(&rwlock->rwlock_spinlock);
+	
+	while(rwlock->is_held_by_writer == true ||  rwlock->readers_list->tl_count != 0)
+	{
+		wchan_sleep(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+		
+	}
+
+	KASSERT(rwlock->is_held_by_writer == false);
+	rwlock->rwlock_curthread = curthread;
+	rwlock->is_held_by_writer = true;
+	spinlock_release(&rwlock->rwlock_spinlock);
+
+
+}
+
+void rwlock_release_write(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+	KASSERT(rwlock_do_i_hold(rwlock));
+
+// writer is done, should i wake up all sleeping readers or a writer now? use a toggle mechanism as of now
+	spinlock_acquire(&rwlock->rwlock_spinlock);
+	if(rwlock->rwlock_next_thread == READER || rwlock->rwlock_next_thread == NONE)
+	{
+		if(!wchan_isempty(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock))
+		{
+			wchan_wakeall(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock);
+			rwlock->rwlock_next_thread = WRITER;
+		}
+		else
+		{
+			if(!wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock))
+			{
+		         wchan_wakeone(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+				rwlock->rwlock_next_thread = READER;
+			}
+		}
+	
+	}
+	else
+	{
+		
+		if(!wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock))
+		{
+			wchan_wakeone(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+			rwlock->rwlock_next_thread = READER;
+		}
+		else
+		{
+			if(!wchan_isempty(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock))
+			{
+		         wchan_wakeall(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock);
+				rwlock->rwlock_next_thread = WRITER;
+			}
+		}
+	
+	}
+	spinlock_release(&rwlock->rwlock_spinlock);
+
+
+
+
+
+}
