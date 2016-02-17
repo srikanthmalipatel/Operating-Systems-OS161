@@ -69,12 +69,35 @@
 #include <test.h>
 #include <synch.h>
 
+#include <types.h>
+#include <lib.h>
+#include <thread.h>
+#include <test.h>
+#include <current.h>
+#include <synch.h>
+#include <kern/secret.h>
+#include <spinlock.h>
 /*
  * Called by the driver during initialization.
  */
 
+
+static struct lock *lock_quad0;
+static struct lock *lock_quad1;
+static struct lock *lock_quad2;
+static struct lock *lock_quad3;
+/*static struct cv   *cv_quad1;
+static struct cv   *cv_quad2;
+static struct cv   *cv_quad3;
+static struct cv   *cv_quad0;*/
+
+
 void
 stoplight_init() {
+	lock_quad0 = lock_create("quad0");
+	lock_quad1 = lock_create("quad1");
+	lock_quad2 = lock_create("quad2");
+	lock_quad3 = lock_create("quad3");
 	return;
 }
 
@@ -82,37 +105,170 @@ stoplight_init() {
  * Called by the driver during teardown.
  */
 
+
 void stoplight_cleanup() {
+	lock_destroy(lock_quad0);
+	lock_destroy(lock_quad1);
+	lock_destroy(lock_quad2);
+	lock_destroy(lock_quad3);
 	return;
 }
 
+void lock_quad(uint32_t direction)
+{
+ // kprintf_n("%s wants to acquire lock %d \n", curthread->t_name,direction);
+	 if(direction == 0)
+	 	lock_acquire(lock_quad0);
+	 else if(direction == 1)
+	 	lock_acquire(lock_quad1);
+	 else if(direction == 2)
+	 	lock_acquire(lock_quad2);
+	 else if(direction == 3)
+	 	lock_acquire(lock_quad3);
+//	kprintf_n("%s acquired lock  %d \n", curthread->t_name,direction);
+
+}
+
+
+void release_quad(uint32_t direction)
+{
+	
+	 if(direction == 0)
+	 	lock_release(lock_quad0);
+	 else if(direction == 1)
+	 	lock_release(lock_quad1);
+	 else if(direction == 2)
+	 	lock_release(lock_quad2);
+	 else if(direction == 3)
+	 	lock_release(lock_quad3);
+//	kprintf_n("%s released lock %d\n", curthread->t_name,direction);
+
+}
 void
 turnright(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
+//	(void)direction;
+//	(void)index;
 	/*
 	 * Implement this function.
 	 */
+//	kprintf_n("%s entered at  %d and wants to turn right\n", curthread->t_name,direction);
+	lock_quad(direction);
+	inQuadrant(direction, index);
+	leaveIntersection(index);
+	release_quad(direction);
+
+
 	return;
 }
 void
 gostraight(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
+
+/// USING CIRCULAR WAIT..ACCESS RESOURCES IN A PARTICULAR ORDER, IN THIS CASE, WE ARE ACCESSING THEM IN INCREASING ORDER, DONE TO AVOID DEADLOCK
+	int first_quad, second_quad;
+	second_quad = (direction + 3 )%4;
+	first_quad = direction ;
+	int quad1, quad2;
+
+	if(first_quad > second_quad)
+	{
+		quad1 = second_quad;
+		quad2 = first_quad;
+	}
+	else
+	{
+		quad1 = first_quad;
+		quad2 = second_quad;
+	
+	}
+	lock_quad(quad1);
+	lock_quad(quad2);
+	inQuadrant(first_quad,index);
+	inQuadrant(second_quad,index);
+	release_quad(first_quad);
+	leaveIntersection(index);
+	release_quad(second_quad);
 	return;
 }
 void
 turnleft(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	
+	int first_quad = direction;
+	int second_quad = (direction + 3)%4;
+	int third_quad = (direction + 6)%4;
+
+	int quad1,quad2,quad3;
+
+	if(first_quad>second_quad)
+	{
+		if(second_quad > third_quad) // first > second > third
+		{
+			quad1 = third_quad;
+			quad2 = second_quad;  
+			quad3 = first_quad;
+		}
+		else
+		{
+			if(first_quad > third_quad) // first > third > second
+			{
+				quad1= second_quad;
+				quad2 = third_quad;
+				quad3 = first_quad;
+			
+			}
+			else // third > first > second
+			{
+				quad1 = second_quad;
+				quad2 = first_quad;
+				quad3 = third_quad;
+			}
+		
+		}
+	
+	}
+	else
+	{
+		if(first_quad > third_quad) // second > first > third
+		{
+			quad1 = third_quad;
+			quad2 = first_quad;
+			quad3 = second_quad;
+		}
+		else
+		{
+			if(second_quad > third_quad) // second> third > first
+			{
+				quad1 = first_quad;
+				quad2 = third_quad;
+				quad3 = second_quad;
+			
+			}
+			else // third> second> first
+			{
+				quad1 = first_quad;
+				quad2 = second_quad;
+				quad3 = third_quad;
+			
+			}
+		
+		}
+	
+	}
+
+
+	lock_quad(quad1);
+	lock_quad(quad2);
+	lock_quad(quad3);
+	inQuadrant(first_quad,index);
+	inQuadrant(second_quad,index);
+	inQuadrant(third_quad,index);
+	release_quad(first_quad);
+	release_quad(second_quad);
+	leaveIntersection(index);
+	release_quad(third_quad);
+
+
 	return;
 }
