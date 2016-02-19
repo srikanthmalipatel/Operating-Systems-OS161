@@ -36,7 +36,7 @@
 
 
 #include <spinlock.h>
-
+#include <threadlist.h>
 /*
  * Dijkstra-style semaphore.
  *
@@ -165,14 +165,16 @@ typedef enum
 struct rwlock {
         char *rwlock_name;
         struct spinlock rwlock_spinlock;
+        volatile int rwlock_readers_count;
         struct wchan *rwlock_read_wchan;
         struct wchan *rwlock_write_wchan;
-        volatile int rwlock_readers_count;
 		thread_type rwlock_next_thread;
 		struct thread* rwlock_curthread;
-		struct threadlist* readers_list;
+		//struct threadlist readers_list;
 		bool is_held_by_writer;
+		//struct lock *rwlock_read_lock;
 		struct lock *rwlock_write_lock;
+		//struct cv *rwlock_cv_lock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
