@@ -43,25 +43,31 @@ failif(bool condition) {
 static
 void readerthread(void *junk, unsigned long num) {
     (void)junk;
-    if(num%2 == 0) {
-        kprintf_n("Thread %lu trying to acquire read lock\n", num);
+    if(num < 80) {
+        //kprintf_n("Thread %lu trying to acquire read lock\n", num);
+        random_yielder(4);
         rwlock_acquire_read(testrwlock);
         random_yielder(4);
         kprintf_n("Thread %lu: Reader val:%lu\n", num, testval1);
+        for(int i=0; i<200; i++);
         random_yielder(4);
         rwlock_release_read(testrwlock);
-        kprintf_n("Thread %lu released read lock\n", num);
+        random_yielder(4);
+        //kprintf_n("Thread %lu released read lock\n", num);
         V(donesem);
     }
     else {
-        kprintf_n("Thread %lu trying to acquire write lock\n", num);
+        //kprintf_n("Thread %lu trying to acquire write lock\n", num);
+        random_yielder(4);
         rwlock_acquire_write(testrwlock);
         random_yielder(4);
         testval1++;
         kprintf_n("Thread %lu: Writer val:%lu\n", num, testval1);
+        for(int i=0; i<200; i++);
         random_yielder(4);
         rwlock_release_write(testrwlock);
-        kprintf_n("Thread %lu released write lock\n", num);
+        random_yielder(4);
+        //kprintf_n("Thread %lu released write lock\n", num);
         V(donesem);
     }
     return;

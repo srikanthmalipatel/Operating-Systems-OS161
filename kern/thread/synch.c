@@ -427,6 +427,8 @@ void rwlock_acquire_read(struct rwlock *rwlock) {
 	        !wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock
 	            ))) {
 		wchan_sleep(rwlock->rwlock_read_wchan, & rwlock->rwlock_spinlock);
+        //kprintf("rwlock_acquire_read: Reader woke up!\n");
+        //kprintf("rwlock_acquire_read: isheldwriter[%d] nextThread[%d]\n", rwlock->is_held_by_writer, rwlock->rwlock_next_thread);
     }
 
 	KASSERT(rwlock->is_held_by_writer == false);
@@ -449,6 +451,7 @@ void rwlock_release_read(struct rwlock *rwlock) {
 	if(rwlock->rwlock_next_thread == WRITER && is_writer_waiting && rwlock->rwlock_readers_count == 1) {
 		//this is the last thread in the readers list, wake up the writer
 			wchan_wakeone(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+        //kprintf("rwlock_acquire_release: Reader woke up!");
     }
 	// if reached here, then there is no writer in the wait chan or there are other readers in the critical section, safe to wake up all sleeping read threads
 	//if(are_readers_waiting)
@@ -469,10 +472,14 @@ void rwlock_acquire_write(struct rwlock *rwlock) {
 	
 	// if there is one writer or alteast one reader in the critical section then we could make this writer sleep
 	while(rwlock->is_held_by_writer == true ||  rwlock->rwlock_readers_count != 0) {
+		//kprintf("Writer Going to sleep\n");
 		wchan_sleep(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
+	    //kprintf("Writer woke up!\n");
+	    //kprintf("isheldbyWriter[%d] readersCount[%d]\n", rwlock->is_held_by_writer, rwlock->rwlock_readers_count);
 	}
 
 	KASSERT(rwlock->is_held_by_writer == false);
+	//kprintf("Acquired write lock\n");
 	rwlock->rwlock_curthread = curthread;
 	rwlock->is_held_by_writer = true;
 	rwlock->rwlock_next_thread = READER;
@@ -485,15 +492,15 @@ void rwlock_release_write(struct rwlock *rwlock) {
     KASSERT(rwlock->rwlock_next_thread == READER);
 // writer is done, should i wake up all sleeping readers or a writer now? use a toggle mechanism as of now
 	spinlock_acquire(&rwlock->rwlock_spinlock);
+	rwlock->is_held_by_writer = false;
 	if(!wchan_isempty(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock)) {
 		wchan_wakeall(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock);
-		rwlock->rwlock_next_thread = WRITER;
+		//rwlock->rwlock_next_thread = WRITER;
 	} else if(!wchan_isempty(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock)) {
 		wchan_wakeone(rwlock->rwlock_write_wchan, &rwlock->rwlock_spinlock);
-		rwlock->rwlock_next_thread = READER;
+		//rwlock->rwlock_next_thread = READER;
 	} else {
         rwlock->rwlock_next_thread = NONE;
     }
-	rwlock->is_held_by_writer = false;
 	spinlock_release(&rwlock->rwlock_spinlock);
 }
