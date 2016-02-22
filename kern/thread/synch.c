@@ -458,6 +458,7 @@ void rwlock_release_read(struct rwlock *rwlock) {
 	//	wchan_wakeall(rwlock->rwlock_read_wchan, &rwlock->rwlock_spinlock);
 	//kprintf("threadlist count: %d\n", rwlock->readers_list.tl_count);
 	rwlock->rwlock_readers_count--;
+	
 	KASSERT(rwlock->rwlock_readers_count >= 0);
 	spinlock_release(&rwlock->rwlock_spinlock);
 }
@@ -466,7 +467,7 @@ void rwlock_acquire_write(struct rwlock *rwlock) {
 	
     KASSERT(curthread->t_in_interrupt == false);
     KASSERT(rwlock != NULL);
-	KASSERT(rwlock_do_i_hold(rwlock) == false);
+	//KASSERT(rwlock_do_i_hold(rwlock) == false);
     
 	spinlock_acquire(&rwlock->rwlock_spinlock);
 	
@@ -489,7 +490,7 @@ void rwlock_acquire_write(struct rwlock *rwlock) {
 void rwlock_release_write(struct rwlock *rwlock) {
 	KASSERT(rwlock != NULL);
 	KASSERT(rwlock_do_i_hold(rwlock));
-    KASSERT(rwlock->rwlock_next_thread == READER);
+    //KASSERT(rwlock->rwlock_next_thread == READER);
 // writer is done, should i wake up all sleeping readers or a writer now? use a toggle mechanism as of now
 	spinlock_acquire(&rwlock->rwlock_spinlock);
 	rwlock->is_held_by_writer = false;
