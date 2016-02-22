@@ -49,7 +49,7 @@ void readerthread(void *junk, unsigned long num) {
         rwlock_acquire_read(testrwlock);
         random_yielder(4);
         kprintf_n("Thread %lu: Reader val:%lu\n", num, testval1);
-        for(int i=0; i<200; i++);
+        for(int i=0; i<40000; i++);
         random_yielder(4);
         rwlock_release_read(testrwlock);
         random_yielder(4);
@@ -63,7 +63,7 @@ void readerthread(void *junk, unsigned long num) {
         random_yielder(4);
         testval1++;
         kprintf_n("Thread %lu: Writer val:%lu\n", num, testval1);
-        for(int i=0; i<200; i++);
+        for(int i=0; i<40000; i++);
         random_yielder(4);
         rwlock_release_write(testrwlock);
         random_yielder(4);
