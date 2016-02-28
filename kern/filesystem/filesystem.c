@@ -11,6 +11,7 @@
 #include <threadprivate.h>
 #include <proc.h>
 #include <current.h>
+#include <synch.h>
 
 void file_table_init(struct file_handle** ft)
 {
@@ -47,9 +48,18 @@ int get_free_file_descriptor(struct file_handle** ft)
 
 struct file_handle* file_handle_create()
 {
+	struct file_handle* fh = kmalloc(sizeof(struct file_handle));
+	KASSERT(fh != NULL);
+	struct lock* lk = lock_create("fh lock");
+	KASSERT(lk != NULL);
+	memset(fh->file_name, 0, sizeof(fh->file_name));
+	fh->offset = 0;
+	fh->openflags = -1;
+	fh->file = NULL;
+	fh->ref_count = -1;
+	fh->fh_lock = lk;
 
-	return NULL;
-
+	return fh;
 
 }
 
