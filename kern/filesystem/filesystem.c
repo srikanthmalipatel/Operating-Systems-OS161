@@ -74,16 +74,25 @@ void file_table_cleanup(struct file_handle** ft)
 
 }
 
-
-
-/*void file_handle_destroy (struct file_handle* fh)
+struct file_handle* get_file_handle(struct file_handle** ft, int fd)
 {
+	if(fd < 0 || fd >= OPEN_MAX)
+		return NULL;
+	
+	else
+		return ft[fd];
+
+}
 
 
 
+void file_handle_destroy (struct file_handle* fh)
+{
+	lock_destroy(fh->fh_lock);
+	kfree(fh->file_name);
+	kfree(fh);
 
-
-}*/
+}
 
 
 

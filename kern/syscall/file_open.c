@@ -13,17 +13,21 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 {
 
 	// same process calls open multiple times on the same file, what do we do ??
-	//wiki says its ok to have multiple file handles to the same file.
+	//wiki says its ok to have multiple file handles to the same file in the same process' file table.
 
 	//should we be bothered about concurrency when it comes to the actual reading and writing of the vnode (not the handle)
 
 
-	if(flags != O_RDONLY && flags != O_WRONLY && flags != O_RDWR)
+	
+	// !!!!!!!!!!  how do we handle the additional crap that we OR with the flags, like create, append etc.
+	// write a separate function to check all cases , but instead of writing a huge if condition, we can make use of the position of the bits in tohe int passed.
+	// for example. only one of the 3 least significant bits should be set. and the bit corresponding to O_EXCL should be set only if the bit for o_CREAT is set.
+
+	if(flags != O_RDONLY && flags != O_WRONLY && flags != O_RDWR) // as mentioned above, write a function to check for this.
 	{
 		return EINVAL;
 	}
 	
-	// !!!!!!!!!!  how do we handle the additional crap that we OR with the flags, like create, append etc.?
 	if(filename == NULL)
 	{
 		return EFAULT;
@@ -43,7 +47,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 
 
 	// are we using this properly?.. check jinghao's blog for example
-	result = copyinstr(filename, kern_file_name, len, actual);
+	result = copyinstr(filename, kern_file_name, len, actual); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
 	if(result)
 	{
 		return result;
@@ -51,7 +55,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	}
 
 	struct vnode** filenode = NULL;
-	int err =  vfs_open(kern_file_name, flags, mode, filenode);	
+	int err =  vfs_open(kern_file_name, flags, mode, filenode);	// this is where the file is actually being opened
 	if(err)
 	{
 		return err;

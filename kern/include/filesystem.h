@@ -16,8 +16,8 @@ struct file_handle
 
 void file_table_cleanup(struct file_handle** );
 struct file_handle* file_handle_create(void);
-void file_handle_destory(struct file_handle* );
-
+struct file_handle* get_file_handle(struct file_handle**, int);
 void file_table_init(struct file_handle** );
 void file_table_destroy(struct file_handle** );
 int get_free_file_descriptor(struct file_handle** );
+void file_handle_destroy (struct file_handle* fh);
