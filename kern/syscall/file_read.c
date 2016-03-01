@@ -22,9 +22,12 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 	if(fh == NULL)
 		return EBADF;
 
-	if(fh->openflags != O_RDONLY) // could have other flags Or'd with O_RDONLY, need to change this.
+	if(fh->openflags != O_RDONLY && fh->openflags != O_RDWR) // could have other flags Or'd with O_RDONLY, need to change this.
 		return EBADF;
 	
+
+// !!!! Should we do copyin's to kernel space, or will the VOP_WRITE take care of the invalid address issue for us.
+
 	lock_acquire(fh->fh_lock); // IS this really necessary??.. turns out it is , offset should be synchronized. imagine if parent and child call this at the same time.
 	struct iovec iov;
 	struct uio u;
