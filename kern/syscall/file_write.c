@@ -23,7 +23,9 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	if(fh->openflags != O_WRONLY && fh->openflags != O_RDWR) // Again, this needs to be changed based on the appended flags.
 		return EBADF;
 
-
+// in the man page, it is mentioned that this operation should be atomic on the file and that the OS cannot make a guarantee.
+// Does that mean that it is the user's responsibility to ensure that it is atomic.
+// or should we do something to make sure that not more than one operation happens on the vnode?
 
  // !!!! Should we do copyin's to kernel space, or will the VOP_WRITE take care of the invalid address issue for us.
 
