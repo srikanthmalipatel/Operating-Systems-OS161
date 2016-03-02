@@ -9,7 +9,7 @@
 #include <thread.h>
 #include <synch.h>
 #include <test.h>
-#include <kern/secret.h>
+#include <kern/test161.h>
 #include <spinlock.h>
 
 #define NUMREADERS1     120 
@@ -142,7 +142,7 @@ rwtest(int nargs, char **args)
     donesem = NULL;
     
     kprintf_t("\n");
-	success(test_status, SECRET, "rwt1");
+	success(TEST161_FAIL, SECRET, "rwt1");
 
 	return 0;
 }
@@ -152,7 +152,7 @@ int rwtest2(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt2 unimplemented\n");
-	success(FAIL, SECRET, "rwt2");
+	success(TEST161_FAIL, SECRET, "rwt2");
 
 	return 0;
 }
@@ -162,7 +162,7 @@ int rwtest3(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt3 unimplemented\n");
-	success(FAIL, SECRET, "rwt3");
+	success(TEST161_FAIL, SECRET, "rwt3");
 
 	return 0;
 }
@@ -172,7 +172,7 @@ int rwtest4(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt4 unimplemented\n");
-	success(FAIL, SECRET, "rwt4");
+	success(TEST161_FAIL, SECRET, "rwt4");
 
 	return 0;
 }
@@ -182,7 +182,7 @@ int rwtest5(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt5 unimplemented\n");
-	success(FAIL, SECRET, "rwt5");
+	success(TEST161_FAIL, SECRET, "rwt5");
 
 	return 0;
 }
