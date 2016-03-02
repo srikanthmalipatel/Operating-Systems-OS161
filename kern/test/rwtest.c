@@ -24,7 +24,7 @@ static struct semaphore *donesem = NULL;
 static struct rwlock    *testrwlock = NULL;
 
 struct spinlock status_lock;
-static bool test_status = FAIL;
+static bool test_status = TEST161_FAIL;
 /*
  * Use these stubs to test your reader-writer locks.
  */
@@ -91,7 +91,6 @@ rwtest(int nargs, char **args)
 	(void)nargs;
 	(void)args;
 
-/*<<<<<<< HEAD
     int i, result;
 
 	kprintf_n("Starting rwt1...\n");
@@ -111,7 +110,7 @@ rwtest(int nargs, char **args)
         }
     }
     spinlock_init(&status_lock);
-    test_status = SUCCESS;
+    test_status = TEST161_SUCCESS;
 
     testval1 = 0;
     // create threads code
@@ -123,14 +122,14 @@ rwtest(int nargs, char **args)
         }
     }
 
-    /*for (i=0; i<NUMWRITERS1; i++) {
+    /* for (i=0; i<NUMWRITERS1; i++) {
         kprintf_t(".");
         result = thread_fork("rwlockstest", NULL, writerthread, NULL, i);
         if(result) {
             panic("rwt1: thread_fork failed: %s\n", strerror(result));
         }
 */    
-	kprintf_n("rwt1 unimplemented\n");
+	kprintf_n("\n");
 	success(TEST161_FAIL, SECRET, "rwt1");
 
 	return 0;
