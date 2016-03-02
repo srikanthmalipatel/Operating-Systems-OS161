@@ -24,7 +24,7 @@ static struct semaphore *donesem = NULL;
 static struct rwlock    *testrwlock = NULL;
 
 struct spinlock status_lock;
-static bool test_status = FAIL;
+static bool test_status = TEST161_FAIL;
 /*
  * Use these stubs to test your reader-writer locks.
  */
@@ -110,7 +110,7 @@ rwtest(int nargs, char **args)
         }
     }
     spinlock_init(&status_lock);
-    test_status = SUCCESS;
+    test_status = TEST161_SUCCESS;
 
     testval1 = 0;
     // create threads code
