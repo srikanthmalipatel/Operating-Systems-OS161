@@ -49,14 +49,14 @@ int get_free_file_descriptor(struct file_handle** ft)
 struct file_handle* file_handle_create()
 {
 	struct file_handle* fh = kmalloc(sizeof(struct file_handle));
-	KASSERT(fh != NULL);
+	KASSERT(fh != NULL); //change this, return null
 	struct lock* lk = lock_create("fh lock");
 	KASSERT(lk != NULL);
 	memset(fh->file_name, 0, sizeof(fh->file_name));
 	fh->offset = 0;
 	fh->openflags = -1;
 	fh->file = NULL;
-	fh->ref_count = -1;
+	fh->ref_count = 0;
 	fh->fh_lock = lk;
 
 	return fh;
@@ -67,7 +67,7 @@ struct file_handle* file_handle_create()
 void file_table_cleanup(struct file_handle** ft)
 {
 	(void)ft;
-
+     	
 
 
 

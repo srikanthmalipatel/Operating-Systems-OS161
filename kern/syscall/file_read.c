@@ -17,6 +17,18 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 	if(fd <0 || fd>= OPEN_MAX)
 		return EBADF;
 	
+	int result;
+	char kern_buffer[len + 1];
+
+	// are we using this properly?.. check jinghao's blog for example
+	// no actual use for the kern buffer, just doing this to check if memory location is valid.
+	result = copyin(buf, kern_buffer, len); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
+	if(result)
+	{
+		return result;
+
+	}
+
 	struct file_handle* fh = get_file_handle(curthread->t_file_table, fd);
 	
 	if(fh == NULL)
@@ -31,7 +43,6 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 	lock_acquire(fh->fh_lock); // IS this really necessary??.. turns out it is , offset should be synchronized. imagine if parent and child call this at the same time.
 	struct iovec iov;
 	struct uio u;
-	int result;
 
 	iov.iov_ubase = (userptr_t)buf;
 	iov.iov_len = len;		 // length of the memory space

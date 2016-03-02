@@ -28,14 +28,14 @@ int sys_close(int fd)
 	// reduce the refcount of this file handle by 1 , using a lock just in case.
 	// if count is 0, destroy the file handle
 
-	vfs_close(fh->file);
-
 	lock_acquire(fh->fh_lock);
 	fh->ref_count--;
 	lock_release(fh->fh_lock);
 	
 	if(fh->ref_count == 0)
 	{
+		
+		vfs_close(fh->file);
 		file_handle_destroy(fh);
 		curthread->t_file_table[fd] = NULL;
 	
