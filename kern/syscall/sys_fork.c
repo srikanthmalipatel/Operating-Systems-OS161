@@ -13,8 +13,9 @@
 
 int sys_fork(struct trapframe *tf) {
     // copy the parents trapframe into kernel heap and copy it
-    struct trapframe *childtf = (struct trapframe *) kmalloc(sizeof(struct trapframe));
-    *childtf = *tf;
+    //struct trapframe *childtf = (struct trapframe *) kmalloc(sizeof(struct trapframe));
+    //*childtf = *tf;
 
+    (void)tf;
     return 0;
 }
