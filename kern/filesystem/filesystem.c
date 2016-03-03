@@ -12,7 +12,7 @@
 #include <proc.h>
 #include <current.h>
 #include <synch.h>
-
+ #include <kern/fcntl.h>
 void file_table_init(struct file_handle** ft)
 {
 	for(int i = 0; i < OPEN_MAX; i++)
@@ -95,6 +95,70 @@ void file_handle_destroy (struct file_handle* fh)
 	kfree(fh);
 
 }
+
+bool is_valid_flag(int flag)
+{
+
+	//only one of the O_RDONLY, O_WRONLY and O_RDWR should be given.
+	// Also the value should be positive and should not exceed
+	
+	int mode = flag & O_ACCMODE;
+	if(mode != O_RDONLY && mode != O_WRONLY && mode != O_RDWR)
+		return false;
+	
+	return true;
+
+}
+
+bool can_read(int flag)
+{
+	if(is_valid_flag(flag))
+	{
+		int mode = flag & O_ACCMODE;
+		if(mode == O_RDONLY || mode == O_RDWR)
+			return true;
+	
+	}
+
+	return false;
+
+}
+
+
+bool can_write(int flag)
+{
+	if(is_valid_flag(flag))
+	{
+		int mode = flag & O_ACCMODE;
+		if(mode == O_WRONLY || mode == O_RDWR)
+			return true;
+	
+	
+	}
+
+	return false;
+
+}
+
+bool is_append(int flag)
+{
+
+	if(is_valid_flag (flag))
+	{
+		int mode = flag >> 5;
+		if(mode & 1)
+			return true;
+	
+	}
+	
+
+	return false;
+
+
+
+}
+
+
 
 
 

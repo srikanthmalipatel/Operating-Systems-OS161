@@ -128,8 +128,9 @@ rwtest(int nargs, char **args)
         if(result) {
             panic("rwt1: thread_fork failed: %s\n", strerror(result));
         }
-*/   	kprintf("%\n", i); 
-	int numthreads NUMREADERS1;
+*/   	
+	kprintf("%d\n", i); 
+	int numthreads =  NUMREADERS1;
 	for(i=0; i<numthreads; i++) {
 		kprintf_t(".");
 		P(donesem);
