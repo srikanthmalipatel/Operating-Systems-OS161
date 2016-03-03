@@ -339,7 +339,7 @@ file      thread/threadlist.c
 #
 
 file      proc/proc.c
-
+file      proc/pid.c
 #
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)

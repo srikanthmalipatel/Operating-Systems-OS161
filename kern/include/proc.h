@@ -37,7 +37,7 @@
  */
 
 #include <spinlock.h>
-
+#include <pid.h>
 struct addrspace;
 struct thread;
 struct vnode;
@@ -79,7 +79,7 @@ struct proc {
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
-
+extern struct procManager *p_manager;
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
 

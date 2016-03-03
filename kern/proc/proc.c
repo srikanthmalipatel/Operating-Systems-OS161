@@ -48,12 +48,13 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <pid.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
-
+struct procManager *p_manager;
 /*
  * Create a proc structure.
  */
@@ -178,6 +179,8 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+    // initalize process manager
+    p_manager = init_pid_manager();
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
