@@ -43,7 +43,7 @@
 #include <file_dup2.h>
 #include <file_getcwd.h>
 #include <file_chdir.h>
-
+#include <copyinout.h>
 /*
  * System call dispatcher.
  *
@@ -124,7 +124,6 @@ syscall(struct trapframe *tf)
 		
 		}
 
-		break;
 	   
 		case SYS_read:
 		{
@@ -133,7 +132,6 @@ syscall(struct trapframe *tf)
 		
 		}
 
-		break;
 	  
 		case SYS_write:
 		{
@@ -144,8 +142,39 @@ syscall(struct trapframe *tf)
 
 
 		case SYS_lseek:
+		{
+			// a little tricky, one of the inputs and the return value are 64 bits long.
+			int fd = tf->tf_a0;
+			off_t pos_left32 = tf->tf_a2;
+			off_t pos_right32 = tf->tf_a3;
+			//pos_left32 <<= 32; // pos_right32 is changing after this line . WTF !!! .. FOLLOW UP !!
+			off_t left = pos_left32 << 32;
+			//off_t pos = pos_left32 | pos_right32;
+			off_t pos = left | pos_right32;
+			int whence;
+			err  = copyin((const userptr_t)tf->tf_sp+16, (void*)&whence, sizeof(int));
+			if(err)
+				break;
 
-		break;
+	
+			off_t lseek_retval;		
+			err = sys_lseek(fd, pos, whence, &lseek_retval);
+			if(err)
+				break;
+
+			// check this. how does the value get copied
+			retval = lseek_retval >> 32;
+			off_t lseek_right32 = lseek_retval;
+
+
+			lseek_right32 = lseek_right32  <<  32;
+			lseek_right32 = lseek_right32 >> 32;
+
+			tf->tf_v1 = lseek_right32;
+			break;		
+		
+		}
+
 
 		
 		case SYS_dup2:
