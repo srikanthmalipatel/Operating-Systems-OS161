@@ -61,7 +61,7 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	u.uio_rw = UIO_WRITE;
 	u.uio_space = proc_getas();    // lifted from loadelf.c, is this the right way to do it?
 
-	result = VOP_READ(fh->file, &u);
+	result = VOP_WRITE(fh->file, &u);
 	if (result) {
 		lock_release(fh->fh_lock);
 		return result;

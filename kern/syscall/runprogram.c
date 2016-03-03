@@ -91,12 +91,62 @@ runprogram(char *progname)
 	vfs_close(v);
 
 	/* Define the user stack in the address space */
+/*	result = as_define_stack(as, &stackptr);
+	if (result) {
+		// p_addrspace will go away when curproc is destroyed 
+		return result;
+	}*/
+
+	struct vnode* v1;
+	struct vnode* v2;
+	struct vnode* v3;
+
+	const char* name = "con:";
+
+	char con_name[5];
+	char con_name2[5];
+	char con_name3[5];
+	
+	strcpy(con_name,name);
+	strcpy(con_name2,name);
+	strcpy(con_name3,name);
+
+	result = vfs_open(con_name, O_RDONLY, 0664, &v1);
+	if(result)
+	{
+		return result;
+	}
+
+	result = vfs_open(con_name2, O_WRONLY, 0664, &v2);
+	if(result)
+		return result;
+
+	result = vfs_open(con_name3, O_WRONLY, 0664, &v3);
+	if(result)
+		return result;
+	
+	struct file_handle* fh1 = file_handle_create();
+	fh1->file = v1;
+	fh1->openflags = O_RDONLY;
+	curthread->t_file_table[0] = fh1;
+	
+	struct file_handle* fh2 = file_handle_create();
+	fh2->file = v2;
+	fh2->openflags = O_WRONLY;
+	curthread->t_file_table[1] = fh2;
+
+	struct file_handle* fh3 = file_handle_create();
+	fh3->file = v3;
+	fh3->openflags = O_WRONLY;
+	curthread->t_file_table[2] = fh3;
+
+
+	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
 		return result;
 	}
-
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,

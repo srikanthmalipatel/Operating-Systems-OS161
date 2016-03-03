@@ -47,15 +47,15 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 
 
 	// are we using this properly?.. check jinghao's blog for example
-	result = copyinstr(filename, kern_file_name, len, actual); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
+	result = copyinstr(filename, kern_file_name, len + 1, actual); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
 	if(result)
 	{
 		return result;
 
 	}
 
-	struct vnode** filenode = NULL;
-	int err =  vfs_open(kern_file_name, flags, mode, filenode);	// this is where the file is actually being opened
+	struct vnode* filenode;
+	int err =  vfs_open(kern_file_name, flags, mode, &filenode);	// this is where the file is actually being opened
 	if(err)
 	{
 		return err;
@@ -66,7 +66,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	struct file_handle* fh = file_handle_create();
 	fh->openflags = flags;
 	fh->ref_count = 1;
-	fh->file = *filenode;
+	fh->file = filenode;
 	
 	strcpy(fh->file_name,kern_file_name); // safe to use because we are playing with only the kernel memory;
 
