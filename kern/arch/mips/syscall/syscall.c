@@ -35,10 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-<<<<<<< HEAD
 #include <kern/sys_fork.h> /* Definintion for sys_fork() */
-
-=======
 #include <file_open.h>
 #include <file_close.h>
 #include <file_read.h>
@@ -47,7 +44,6 @@
 #include <file_dup2.h>
 #include <file_getcwd.h>
 #include <file_chdir.h>
->>>>>>> e335f5ceee77f31a9af2cdb9a99a5e1f2e4cfe9d
 
 /*
  * System call dispatcher.
