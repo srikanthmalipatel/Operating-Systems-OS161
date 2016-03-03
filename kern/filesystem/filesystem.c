@@ -89,7 +89,9 @@ struct file_handle* get_file_handle(struct file_handle** ft, int fd)
 void file_handle_destroy (struct file_handle* fh)
 {
 	lock_destroy(fh->fh_lock);
-	kfree(fh->file_name);
+	fh->fh_lock = NULL;
+//	kfree(fh->file_name);
+	fh->file = NULL;
 	kfree(fh);
 
 }
