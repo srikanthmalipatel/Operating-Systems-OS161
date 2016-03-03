@@ -101,6 +101,10 @@ bool is_valid_flag(int flag)
 
 	//only one of the O_RDONLY, O_WRONLY and O_RDWR should be given.
 	// Also the value should be positive and should not exceed
+
+	if(flag < 0 || flag > 127) // all flags are set, should not be greater than this.
+		return false;
+	
 	
 	int mode = flag & O_ACCMODE;
 	if(mode != O_RDONLY && mode != O_WRONLY && mode != O_RDWR)
