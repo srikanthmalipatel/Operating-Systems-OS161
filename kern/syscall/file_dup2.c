@@ -21,7 +21,9 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 	
 	if(fh == NULL)
 		return EBADF;
-	
+
+	lock_acquire(fh->fh_lock); // what if another process is doing something else on the same file handle while it is trying to move it.
+
 	struct file_handle* fh1 = get_file_handle(curthread->t_file_table, newfd);
 	if(fh1 == NULL)
 	{
@@ -39,7 +41,8 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 	
 	
 	}
-
+	
+	lock_release(fh->fh_lock);
 	*retval = newfd;
 	return 0;
 
