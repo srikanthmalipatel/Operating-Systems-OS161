@@ -35,8 +35,19 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+<<<<<<< HEAD
 #include <kern/sys_fork.h> /* Definintion for sys_fork() */
 
+=======
+#include <file_open.h>
+#include <file_close.h>
+#include <file_read.h>
+#include <file_write.h>
+#include <file_lseek.h>
+#include <file_dup2.h>
+#include <file_getcwd.h>
+#include <file_chdir.h>
+>>>>>>> e335f5ceee77f31a9af2cdb9a99a5e1f2e4cfe9d
 
 /*
  * System call dispatcher.
@@ -104,8 +115,58 @@ syscall(struct trapframe *tf)
 	    case SYS_reboot:
 		err = sys_reboot(tf->tf_a0);
 		break;
+		
+		case SYS_open:
+		{
+			err = sys_open((const_userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
+			break;
+		}
 
-	    case SYS___time:
+		case SYS_close:
+		{
+			err = sys_close(tf->tf_a0);
+			break;
+		
+		}
+
+		break;
+	   
+		case SYS_read:
+		{
+			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
+			break;
+		
+		}
+
+		break;
+	  
+		case SYS_write:
+		{
+			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2, &retval);
+			break;		
+		
+		}
+
+
+		case SYS_lseek:
+
+		break;
+
+		
+		case SYS_dup2:
+
+		break;
+
+		case SYS_chdir:
+
+		break;
+
+
+		case SYS___getcwd:
+
+		break;
+
+		case SYS___time:
 		err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);
 		break;

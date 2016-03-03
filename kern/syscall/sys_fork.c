@@ -12,6 +12,9 @@
 #include <kern/sys_fork.h> /* Definintion for sys_fork() */
 
 int sys_fork(struct trapframe *tf) {
-    (void) tf;      // supress warnings for now
+    // copy the parents trapframe into kernel heap and copy it
+    struct trapframe *childtf = (struct trapframe *) kmalloc(sizeof(struct trapframe));
+    *childtf = *tf;
+
     return 0;
 }

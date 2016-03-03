@@ -39,7 +39,7 @@
 #include <array.h>
 #include <spinlock.h>
 #include <threadlist.h>
-
+#include <filesystem.h>
 struct cpu;
 
 /* get machine-dependent defs */
@@ -99,11 +99,14 @@ struct thread {
 	 */
 	bool t_in_interrupt;		/* Are we in an interrupt? */
 	int t_curspl;			/* Current spl*() state */
-	int t_iplhigh_count;		/* # of times IPL has been raised */
+	int t_iplhigh_count;	/* # of times IPL has been raised */
 
 	/*
 	 * Public fields
 	 */
+
+	 struct file_handle* t_file_table[OPEN_MAX];
+
 
 	/* add more here as needed */
 };

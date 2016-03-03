@@ -122,7 +122,7 @@ rwtest(int nargs, char **args)
         }
     }
 
-    /*for (i=0; i<NUMWRITERS1; i++) {
+    /* for (i=0; i<NUMWRITERS1; i++) {
         kprintf_t(".");
         result = thread_fork("rwlockstest", NULL, writerthread, NULL, i);
         if(result) {
@@ -142,6 +142,7 @@ rwtest(int nargs, char **args)
     donesem = NULL;
     
     kprintf_t("\n");
+	kprintf_n("\n");
 	success(TEST161_FAIL, SECRET, "rwt1");
 
 	return 0;

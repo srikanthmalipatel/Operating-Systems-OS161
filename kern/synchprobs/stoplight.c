@@ -191,6 +191,8 @@ gostraight(uint32_t direction, uint32_t index)
 	release_quad(second_quad);
 	return;
 }
+
+//!!!!!! SHOULD WE IMPLEMENT FCFS, FIRST GUY TO ENTER THE JUNCTION IS THE FIRST GUY TO EXECUTE?
 void
 turnleft(uint32_t direction, uint32_t index)
 {

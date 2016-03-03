@@ -420,6 +420,22 @@ optfile   sfs    fs/sfs/sfs_inode.c
 optfile   sfs    fs/sfs/sfs_io.c
 optfile   sfs    fs/sfs/sfs_vnops.c
 
+
+
+#Anirudh's file system
+file filesystem/filesystem.c
+
+
+#Anirudh's sys calls
+file syscall/file_open.c
+file syscall/file_close.c
+file syscall/file_read.c
+file syscall/file_write.c
+file syscall/file_lseek.c
+file syscall/file_dup2.c
+file syscall/file_chdir.c
+file syscall/file_getcwd.c
+
 #
 # netfs (the networked filesystem - you might write this as one assignment)
 #

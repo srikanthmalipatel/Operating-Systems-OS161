@@ -71,6 +71,10 @@ struct proc {
 	struct vnode *p_cwd;		/* current working directory */
 
 	/* add more material here as needed */
+	
+	/* Process Id Management */
+	pid_t pid;
+	pid_t ppid;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
