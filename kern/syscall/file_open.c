@@ -7,7 +7,7 @@
 #include <lib.h>
 #include <vfs.h>
 #include <current.h>
-//#include <filesystem.h>
+#include <kern/stat.h>
 
 int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 {
@@ -23,7 +23,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	// write a separate function to check all cases , but instead of writing a huge if condition, we can make use of the position of the bits in tohe int passed.
 	// for example. only one of the 3 least significant bits should be set. and the bit corresponding to O_EXCL should be set only if the bit for o_CREAT is set.
 
-	if(flags != O_RDONLY && flags != O_WRONLY && flags != O_RDWR) // as mentioned above, write a function to check for this.
+	if(!is_valid_flag(flags)) // as mentioned above, write a function to check for this.
 	{
 		return EINVAL;
 	}
@@ -70,7 +70,16 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	
 	strcpy(fh->file_name,kern_file_name); // safe to use because we are playing with only the kernel memory;
 
-	fh->offset = 0; // check if O_APPEND is passed, if yes, then use VOP_STAT to get the file size and update offset with the file size.
+	if(is_append(flags))
+	{
+		struct stat file_stats;
+		result = VOP_STAT(filenode, &file_stats);
+		if(result)
+			return result;
+		fh->offset = file_stats.st_size;
+	}
+	else
+		fh->offset = 0; // check if O_APPEND is passed, if yes, then use VOP_STAT to get the file size and update offset with the file size.
 	
 	curthread->t_file_table[fd] = fh;
 
