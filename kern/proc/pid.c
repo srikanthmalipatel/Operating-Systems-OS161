@@ -26,5 +26,12 @@ struct procManager* init_pid_manager() {
 }
 
 pid_t alloc_pid() {
-    return 0;
+    int i;
+    lock_acquire(&pm->plock);
+	for(i=2; i<__PID_MAX; i++) {
+		if(pm->p_table[i] == NULL)
+			return i; 
+	}    
+    lock_release(&pm->plock);
+    return ENPROC;
 }
