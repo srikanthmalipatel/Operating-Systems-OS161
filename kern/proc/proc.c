@@ -68,6 +68,11 @@ proc_create(const char *name)
 	if (proc == NULL) {
 		return NULL;
 	}
+	proc->pid = alloc_pid();
+    if(proc->pid == -1) {
+        kfree(proc);
+        return NULL;
+    }
 	proc->p_name = kstrdup(name);
 	if (proc->p_name == NULL) {
 		kfree(proc);
@@ -83,7 +88,6 @@ proc_create(const char *name)
 	/* VFS fields */
 	proc->p_cwd = NULL;
 
-	proc->pid = alloc_pid();
 
 	return proc;
 }

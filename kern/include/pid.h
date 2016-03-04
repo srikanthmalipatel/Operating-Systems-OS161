@@ -16,6 +16,7 @@ struct procManager {
 };
 
 struct procManager* init_pid_manager(void);
+void destroy_pid_manager(struct procManager *);
 pid_t alloc_pid(void);
-void dealloc_pid(pid_t pid);
+int dealloc_pid(pid_t pid);
 #endif /* !PID_H */
