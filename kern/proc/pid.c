@@ -10,8 +10,13 @@
 struct procManager* init_pid_manager() {
     struct procManager *pm;
     pm = (struct procManager *) kmalloc(sizeof(struct procManager));
-    KASSERT(pm != NULL);
+    if(pm == NULL)
+        return NULL;
     pm->p_lock = lock_create("proc lock");
+    if(pm->p_lock == NULL) {
+        free(pm);
+        return NULL;
+    }
     KASSERT(pm->p_lock != NULL);
     int i;
     for(i=0; i<__PID_MAX; i++) {

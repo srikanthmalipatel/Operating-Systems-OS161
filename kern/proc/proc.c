@@ -83,6 +83,8 @@ proc_create(const char *name)
 	/* VFS fields */
 	proc->p_cwd = NULL;
 
+	proc->pid = alloc_pid();
+
 	return proc;
 }
 
@@ -253,7 +255,7 @@ proc_addthread(struct proc *proc, struct thread *t)
 
 /*
  * Remove a thread from its process. Either the thread or the process
- * might or might not be current.
+* might or might not be current.
  *
  * Turn off interrupts on the local cpu while changing t_proc, in
  * case it's current, to protect against the as_activate call in
