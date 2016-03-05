@@ -551,6 +551,75 @@ thread_fork(const char *name,
 }
 
 /*
+ * Create a new thread based on an existing one.
+ *
+ * The new thread has name NAME, and starts executing in function
+ * ENTRYPOINT. DATA1 and DATA2 are passed to ENTRYPOINT.
+ *
+ * The new thread is created in the process P. If P is null, the
+ * process is inherited from the caller. It will start on the same CPU
+ * as the caller, unless the scheduler intervenes first.
+ */
+int
+thread_fork_proc(const char *name,
+	    struct proc *proc,
+	    void (*entrypoint)(void *data1, unsigned long data2),
+	    void *data1, unsigned long data2)
+{
+	struct thread *newthread;
+	int result;
+
+	newthread = thread_create(name);
+	if (newthread == NULL) {
+		return ENOMEM;
+	}
+
+	/* Allocate a stack */
+	newthread->t_stack = kmalloc(STACK_SIZE);
+	if (newthread->t_stack == NULL) {
+		thread_destroy(newthread);
+		return ENOMEM;
+	}
+	thread_checkstack_init(newthread);
+
+	/*
+	 * Now we clone various fields from the parent thread.
+	 */
+
+	/* Thread subsystem fields */
+	newthread->t_cpu = curthread->t_cpu;
+
+	/* Attach the new thread to its process */
+	if (proc == NULL) {
+		proc = curthread->t_proc;
+	}
+	result = proc_addthread(proc, newthread);
+	if (result) {
+		/* thread_destroy will clean up the stack */
+		thread_destroy(newthread);
+		return result;
+    }
+    
+
+    // TODO:do a file table copy here
+
+	/*
+	 * Because new threads come out holding the cpu runqueue lock
+	 * (see notes at bottom of thread_switch), we need to account
+	 * for the spllower() that will be done releasing it.
+	 */
+	newthread->t_iplhigh_count++;
+
+	/* Set up the switchframe so entrypoint() gets called */
+	switchframe_init(newthread, entrypoint, data1, data2);
+
+	/* Lock the current cpu's run queue and make the new thread runnable */
+	thread_make_runnable(newthread, false);
+
+	return 0;
+}
+
+/*
  * High level, machine-independent context switch code.
  *
  * The current thread is queued appropriately and its state is changed

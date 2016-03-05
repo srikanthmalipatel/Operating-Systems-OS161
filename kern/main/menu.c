@@ -70,10 +70,15 @@
  * It copies the program name because runprogram destroys the copy
  * it gets by passing it to vfs_open().
  */
+
+static struct semaphore *consolesem = NULL;
+struct semaphore **runconsolesem = &consolesem;
+
 static
 void
 cmd_progthread(void *ptr, unsigned long nargs)
 {
+    //kprintf("[cmd_progthread] Acquiring seamphore \n");
 	char **args = ptr;
 	char progname[128];
 	int result;
@@ -89,13 +94,14 @@ cmd_progthread(void *ptr, unsigned long nargs)
 
 	strcpy(progname, args[0]);
 
+    //kprintf("%s\n",progname);
 	result = runprogram(progname);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
 		return;
 	}
-
+    
 	/* NOTREACHED: runprogram only returns on error. */
 }
 
@@ -123,11 +129,12 @@ common_prog(int nargs, char **args)
 	if (proc == NULL) {
 		return ENOMEM;
 	}
-
+    // lock acquire
 	result = thread_fork(args[0] /* thread name */,
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
+    P(consolesem);
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
@@ -807,6 +814,11 @@ menu(char *args)
 
 	menu_execute(args, 1);
 
+    // Initalize a semaphore for locking console
+    consolesem = sem_create("consolesem", 0);
+    if (consolesem == NULL) {
+	    panic("consolesem: sem_create failed\n");
+    }
 	while (1) {
 		/*
 		 * Defined in overwrite.h. If you want to change the kernel prompt, please
@@ -815,5 +827,6 @@ menu(char *args)
 		kprintf(KERNEL_PROMPT);
 		kgets(buf, sizeof(buf));
 		menu_execute(buf, 0);
+		// sem acquire
 	}
 }

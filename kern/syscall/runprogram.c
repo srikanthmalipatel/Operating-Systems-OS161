@@ -45,6 +45,8 @@
 #include <syscall.h>
 #include <test.h>
 
+extern struct semaphore **runconsolesem;
+
 /*
  * Load program "progname" and start running it in usermode.
  * Does not return except on error.
@@ -148,6 +150,8 @@ runprogram(char *progname)
 		return result;
 	}
 	/* Warp to user mode. */
+	//kprintf("[run program] releasing semaphore \n");
+    V(*runconsolesem);
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
 			  stackptr, entrypoint);
