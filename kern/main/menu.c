@@ -817,16 +817,13 @@ menu(char *args)
 	char buf[64];
 
 	menu_execute(args, 1);
-<<<<<<< HEAD
 
     // Initalize a semaphore for locking console
     consolesem = sem_create("consolesem", 0);
     if (consolesem == NULL) {
 	    panic("consolesem: sem_create failed\n");
     }
-=======
 	
->>>>>>> 8f4255a5f56a06dabed30104d5962d3d6a1b84e5
 	while (1) {
 		/*
 		 * Defined in overwrite.h. If you want to change the kernel prompt, please
