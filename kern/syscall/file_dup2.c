@@ -11,12 +11,20 @@
 
 int sys_dup2(int oldfd, int newfd, int* retval)
 {
+	
+
 	if(oldfd < 0 || oldfd >= OPEN_MAX)
 		return EBADF;
 	
 	if(newfd <0 || newfd >= OPEN_MAX)
 		return EBADF;
-	
+
+	if(oldfd == newfd)
+	{
+	    // nothing to do here.
+		*retval = newfd;
+		return 0;
+	}
 	struct file_handle* fh = get_file_handle(curthread->t_file_table, oldfd);
 	
 	if(fh == NULL)

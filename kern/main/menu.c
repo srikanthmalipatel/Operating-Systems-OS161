@@ -46,7 +46,7 @@
 #include "opt-net.h"
 #include "opt-synchprobs.h"
 #include "opt-automationtest.h"
-
+#include <synch.h>
 /*
  * In-kernel menu and command dispatcher.
  */
@@ -70,6 +70,7 @@
  * It copies the program name because runprogram destroys the copy
  * it gets by passing it to vfs_open().
  */
+
 static
 void
 cmd_progthread(void *ptr, unsigned long nargs)
@@ -133,6 +134,9 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
+
+
+	// acquire lock here.
 
 	/*
 	 * The new process will be destroyed when the program exits...
@@ -382,6 +386,8 @@ cmd_kheapused(int nargs, char **args)
 {
 	(void)nargs;
 	(void)args;
+
+
 
 	kheap_printused();
 
@@ -806,7 +812,7 @@ menu(char *args)
 	char buf[64];
 
 	menu_execute(args, 1);
-
+	
 	while (1) {
 		/*
 		 * Defined in overwrite.h. If you want to change the kernel prompt, please

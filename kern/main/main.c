@@ -50,7 +50,7 @@
 #include <test.h>
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
-
+#include <synch.h>
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -208,6 +208,7 @@ sys_reboot(int code)
 void
 kmain(char *arguments)
 {
+	
 	boot();
 
 	menu(arguments);
