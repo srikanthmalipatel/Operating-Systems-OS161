@@ -37,17 +37,17 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	if(fd == -1)
 		return EMFILE;
 	
-	size_t len = strlen((const char*)filename);
+/*	size_t len = strlen((const char*)filename); // culprit !! 
 	if(len > NAME_MAX)
 		return EFAULT ; // just in case, but is EFAULT the correct error response;
-
+*/
 	int result;
 	size_t* actual = NULL;
-	char kern_file_name[len + 1];
+	char kern_file_name[NAME_MAX + 1];
 
 
 	// are we using this properly?.. check jinghao's blog for example
-	result = copyinstr(filename, kern_file_name, len + 1, actual); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
+	result = copyinstr(filename, kern_file_name, NAME_MAX + 1, actual); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
 	if(result)
 	{
 		return result;
