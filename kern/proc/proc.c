@@ -181,7 +181,7 @@ void
 proc_bootstrap(void)
 {
     // initalize process manager
-    p_manager = init_pid_manager();
+    //p_manager = init_pid_manager();
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");

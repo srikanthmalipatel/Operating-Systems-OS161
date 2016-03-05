@@ -151,7 +151,6 @@ runprogram(char *progname)
 	}
 	/* Warp to user mode. */
 	//kprintf("[run program] releasing semaphore \n");
-    V(*runconsolesem);
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
 			  stackptr, entrypoint);
