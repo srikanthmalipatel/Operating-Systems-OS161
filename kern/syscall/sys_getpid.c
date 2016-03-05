@@ -9,6 +9,7 @@
 #include <test.h>
 #include <kern/sys_getpid.h>
 
-pid_t sys_getpid() {
-    return curproc->pid;
+int sys_getpid(int *retval) {
+    *retval = curproc->pid;
+    return 0;
 }

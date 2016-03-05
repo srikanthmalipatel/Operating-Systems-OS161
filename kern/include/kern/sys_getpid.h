@@ -10,6 +10,6 @@
 
 #include <types.h>
 
-int sys_getpid(void);
+int sys_getpid(int *);
 
 #endif /* !GETPID_H */
