@@ -24,7 +24,9 @@ off_t sys_lseek(int fd, off_t pos, int whence, off_t* retval)
 	if(fh == NULL)
 		return EBADF;
 
-	if(strcmp(fh->file_name, "con:") == 0)
+	//lseek on devices should fail. right now i only  know "con:" and "null:"
+	// which other devices should i add here. AST TA !!!
+	if(strcmp(fh->file_name, "con:") == 0 || strcmp(fh->file_name, "null:") == 0)
 		return ESPIPE;
 
 	lock_acquire(fh->fh_lock);

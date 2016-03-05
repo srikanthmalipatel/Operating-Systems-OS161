@@ -44,6 +44,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	int result;
 	size_t* actual = NULL;
 	char kern_file_name[NAME_MAX + 1];
+	memset(kern_file_name, 0, NAME_MAX + 1);
 
 
 	// are we using this properly?.. check jinghao's blog for example
@@ -54,6 +55,10 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 
 	}
 
+	char kern_file_name_copy[NAME_MAX + 1]; // using this because kern_file_name gets modified inside vfs_open.
+	memset(kern_file_name_copy , 0, NAME_MAX + 1);
+	strcpy(kern_file_name_copy, kern_file_name);
+	
 	struct vnode* filenode;
 	int err =  vfs_open(kern_file_name, flags, mode, &filenode);	// this is where the file is actually being opened
 	if(err)
@@ -68,7 +73,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	fh->ref_count = 1;
 	fh->file = filenode;
 	
-	strcpy(fh->file_name,kern_file_name); // safe to use because we are playing with only the kernel memory;
+	strcpy(fh->file_name,kern_file_name_copy); // safe to use because we are playing with only the kernel memory;
 
 	if(is_append(flags))
 	{
