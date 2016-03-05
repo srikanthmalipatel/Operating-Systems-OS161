@@ -44,15 +44,13 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
-
-extern struct semaphore **runconsolesem;
-
 /*
  * Load program "progname" and start running it in usermode.
  * Does not return except on error.
  *
  * Calls vfs_open on progname and thus may destroy it.
  */
+
 int
 runprogram(char *progname)
 {
@@ -121,25 +119,33 @@ runprogram(char *progname)
 
 	result = vfs_open(con_name2, O_WRONLY, 0664, &v2);
 	if(result)
+	{
 		return result;
-
+	}
 	result = vfs_open(con_name3, O_WRONLY, 0664, &v3);
 	if(result)
+	{
 		return result;
-	
+	}
 	struct file_handle* fh1 = file_handle_create();
 	fh1->file = v1;
 	fh1->openflags = O_RDONLY;
+	fh1->ref_count  = 1;
+	strcpy(fh1->file_name,"con:");
 	curthread->t_file_table[0] = fh1;
 	
 	struct file_handle* fh2 = file_handle_create();
 	fh2->file = v2;
 	fh2->openflags = O_WRONLY;
+	fh2->ref_count = 1;
+	strcpy(fh2->file_name, "con:");
 	curthread->t_file_table[1] = fh2;
 
 	struct file_handle* fh3 = file_handle_create();
 	fh3->file = v3;
 	fh3->openflags = O_WRONLY;
+	fh3->ref_count = 1;
+	strcpy(fh3->file_name, "con:");
 	curthread->t_file_table[2] = fh3;
 
 

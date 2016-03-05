@@ -37,10 +37,11 @@ int sys_close(int fd)
 		
 		vfs_close(fh->file);
 		file_handle_destroy(fh);
-		curthread->t_file_table[fd] = NULL;
 	
 	}
 
+	// should set this to null even if the file handle is not destroyed.
+	 curthread->t_file_table[fd] = NULL;
 
 	return 0;
 

@@ -34,7 +34,7 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 	if(fh == NULL)
 		return EBADF;
 
-	if(fh->openflags != O_RDONLY && fh->openflags != O_RDWR) // could have other flags Or'd with O_RDONLY, need to change this.
+	if(!can_read(fh->openflags)) // could have other flags Or'd with O_RDONLY, need to change this.
 		return EBADF;
 	
 

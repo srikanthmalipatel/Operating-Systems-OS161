@@ -21,3 +21,7 @@ void file_table_init(struct file_handle** );
 void file_table_destroy(struct file_handle** );
 int get_free_file_descriptor(struct file_handle** );
 void file_handle_destroy (struct file_handle* fh);
+bool is_valid_flag(int);
+bool can_read(int);
+bool can_write(int);
+bool is_append(int);

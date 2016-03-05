@@ -38,7 +38,7 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	if(fh == NULL)
 		return EBADF;
 
-	if(fh->openflags != O_WRONLY && fh->openflags != O_RDWR) // Again, this needs to be changed based on the appended flags.
+	if(!can_write(fh->openflags)) // Again, this needs to be changed based on the appended flags.
 		return EBADF;
 
 // in the man page, it is mentioned that this operation should be atomic on the file and that the OS cannot make a guarantee.

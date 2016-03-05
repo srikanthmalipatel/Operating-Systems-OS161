@@ -12,7 +12,7 @@
 #include <proc.h>
 #include <current.h>
 #include <synch.h>
-
+ #include <kern/fcntl.h>
 void file_table_init(struct file_handle** ft)
 {
 	for(int i = 0; i < OPEN_MAX; i++)
@@ -49,9 +49,11 @@ int get_free_file_descriptor(struct file_handle** ft)
 struct file_handle* file_handle_create()
 {
 	struct file_handle* fh = kmalloc(sizeof(struct file_handle));
-	KASSERT(fh != NULL); //change this, return null
+	if(fh == NULL)
+		return NULL ;
 	struct lock* lk = lock_create("fh lock");
-	KASSERT(lk != NULL);
+	if(lk == NULL)
+		return NULL;
 	memset(fh->file_name, 0, sizeof(fh->file_name));
 	fh->offset = 0;
 	fh->openflags = -1;
@@ -95,6 +97,74 @@ void file_handle_destroy (struct file_handle* fh)
 	kfree(fh);
 
 }
+
+bool is_valid_flag(int flag)
+{
+
+	//only one of the O_RDONLY, O_WRONLY and O_RDWR should be given.
+	// Also the value should be positive and should not exceed
+
+	if(flag < 0 || flag > 127) // all flags are set, should not be greater than this.
+		return false;
+	
+	
+	int mode = flag & O_ACCMODE;
+	if(mode != O_RDONLY && mode != O_WRONLY && mode != O_RDWR)
+		return false;
+	
+	return true;
+
+}
+
+bool can_read(int flag)
+{
+	if(is_valid_flag(flag))
+	{
+		int mode = flag & O_ACCMODE;
+		if(mode == O_RDONLY || mode == O_RDWR)
+			return true;
+	
+	}
+
+	return false;
+
+}
+
+
+bool can_write(int flag)
+{
+	if(is_valid_flag(flag))
+	{
+		int mode = flag & O_ACCMODE;
+		if(mode == O_WRONLY || mode == O_RDWR)
+			return true;
+	
+	
+	}
+
+	return false;
+
+}
+
+bool is_append(int flag)
+{
+
+	if(is_valid_flag (flag))
+	{
+		int mode = flag >> 5;
+		if(mode & 1)
+			return true;
+	
+	}
+	
+
+	return false;
+
+
+
+}
+
+
 
 
 
