@@ -21,7 +21,7 @@ struct procManager* init_pid_manager() {
     }
     KASSERT(pm->p_lock != NULL);
     int i;
-    for(i=0; i<__PID_MAX; i++) {
+    for(i=0; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
     }
     return pm;
@@ -31,7 +31,7 @@ void destroy_pid_manager(struct procManager *pm) {
     KASSERT(pm != NULL);
     //lock_acquire(pm->p_lock);
     int i;
-    for(i=0; i<__PID_MAX; i++) {
+    for(i=0; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
     }
     //lock_release(pm->p_lock);
@@ -46,7 +46,7 @@ void destroy_pid_manager(struct procManager *pm) {
 pid_t alloc_pid(struct proc *userproc) {
     int i;
     //lock_acquire(p_manager->p_lock);
-	for(i=2; i<__PID_MAX; i++) {
+	for(i=2; i<__MAX_PROC; i++) {
 		if(p_manager->p_table[i] == NULL)
             //lock_release(p_manager->p_lock);
             p_manager->p_table[i] = userproc;
@@ -59,7 +59,7 @@ pid_t alloc_pid(struct proc *userproc) {
 int dealloc_pid(struct proc *userproc) {
     int i;
     //lock_acquire(p_manager->p_lock);
-    for(i=2; i<__PID_MAX; i++) {
+    for(i=2; i<__MAX_PROC; i++) {
         if(i == userproc->pid) {
             p_manager->p_table[i] = NULL;
             //lock_release(p_manager->p_lock);
@@ -68,4 +68,14 @@ int dealloc_pid(struct proc *userproc) {
     }
     //lock_release(p_manager->p_lock);
     return 0;
+}
+
+bool check_ppid_exists(struct proc *userproc) {
+    int i;
+    for(i=2; i<__MAX_PROC; i++) {
+        if(i == userproc->ppid) {
+            return true;
+        }
+    }
+    return false;
 }

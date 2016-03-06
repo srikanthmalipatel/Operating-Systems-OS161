@@ -46,6 +46,7 @@
 #include <file_getcwd.h>
 #include <file_chdir.h>
 #include <copyinout.h>
+#include <kern/sys_exit.h>
 /*
  * System call dispatcher.
  *
@@ -213,9 +214,12 @@ syscall(struct trapframe *tf)
         case SYS_getpid:
             err = sys_getpid(&retval);
             break;
+        case SYS__exit:
+            err = sys__exit(tf->tf_a0);
+            break;
 	    default:
-		kprintf("Unknown syscall %d\n", callno);
-		err = ENOSYS;
+		    kprintf("Unknown syscall %d\n", callno);
+		    err = ENOSYS;
 		break;
 	}
 

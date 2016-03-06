@@ -75,6 +75,13 @@ struct proc {
 	/* Process Id Management */
 	pid_t pid;
 	pid_t ppid;
+
+    /* Waitpid and _exit call bookkeeping */
+    struct semaphore *p_exitsem;
+    bool exited;
+    int exitcode;
+    /* 1:1 relation between process and thread */
+	struct thread *p_self;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

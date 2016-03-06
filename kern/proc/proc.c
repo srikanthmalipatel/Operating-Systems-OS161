@@ -83,7 +83,13 @@ proc_create(const char *name)
 	/* VFS fields */
 	proc->p_cwd = NULL;
 
+    proc->pid = -1;
+    proc->ppid = -1;
 
+    proc->p_self = NULL;
+    proc->p_exitsem = sem_create("exitsem", 0);
+    proc->exited = false;
+    proc->exitcode = -1;
 	return proc;
 }
 
@@ -168,8 +174,10 @@ proc_destroy(struct proc *proc)
 	}
 
 	KASSERT(proc->p_numthreads == 0);
+	KASSERT(proc->p_self == NULL);
 	spinlock_cleanup(&proc->p_lock);
 
+    sem_destroy(proc->p_exitsem);
 	kfree(proc->p_name);
 	kfree(proc);
 }
@@ -181,7 +189,7 @@ void
 proc_bootstrap(void)
 {
     // initalize process manager
-    //p_manager = init_pid_manager();
+    p_manager = init_pid_manager();
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
@@ -242,6 +250,7 @@ proc_addthread(struct proc *proc, struct thread *t)
 	KASSERT(t->t_proc == NULL);
 
 	spinlock_acquire(&proc->p_lock);
+	proc->p_self = t;
 	proc->p_numthreads++;
 	spinlock_release(&proc->p_lock);
 
@@ -272,6 +281,7 @@ proc_remthread(struct thread *t)
 
 	spinlock_acquire(&proc->p_lock);
 	KASSERT(proc->p_numthreads > 0);
+	proc->p_self = NULL;
 	proc->p_numthreads--;
 	spinlock_release(&proc->p_lock);
 
