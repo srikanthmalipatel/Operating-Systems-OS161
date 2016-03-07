@@ -34,7 +34,7 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	if(fd < 0 || fd >= OPEN_MAX )
 		return EBADF;
 	
-	struct file_handle* fh = get_file_handle(curthread->t_file_table, fd);
+	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);
 	if(fh == NULL)
 		return EBADF;
 

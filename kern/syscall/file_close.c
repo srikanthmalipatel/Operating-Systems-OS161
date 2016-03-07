@@ -8,7 +8,7 @@
 #include <lib.h>
 #include <vfs.h>
 #include <current.h>
-
+#include<proc.h>
 
 int sys_close(int fd)
 {
@@ -18,7 +18,7 @@ int sys_close(int fd)
 	if(fd < 0 || fd >= OPEN_MAX)
 		return EBADF;
 	
-	struct file_handle* fh = get_file_handle(curthread->t_file_table, fd);
+	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);
 	if(fh == NULL)
 		return EBADF;
 
@@ -41,7 +41,7 @@ int sys_close(int fd)
 	}
 
 	// should set this to null even if the file handle is not destroyed.
-	 curthread->t_file_table[fd] = NULL;
+	 curproc->t_file_table[fd] = NULL;
 
 	return 0;
 

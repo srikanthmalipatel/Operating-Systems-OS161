@@ -38,6 +38,9 @@
 
 #include <spinlock.h>
 #include <pid.h>
+#include <limits.h>
+#include <filesystem.h>
+
 struct addrspace;
 struct thread;
 struct vnode;
@@ -71,7 +74,8 @@ struct proc {
 	struct vnode *p_cwd;		/* current working directory */
 
 	/* add more material here as needed */
-	
+	struct file_handle* t_file_table[OPEN_MAX];	
+
 	/* Process Id Management */
 	pid_t pid;
 	pid_t ppid;

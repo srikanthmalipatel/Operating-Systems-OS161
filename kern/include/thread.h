@@ -105,7 +105,7 @@ struct thread {
 	 * Public fields
 	 */
 
-	 struct file_handle* t_file_table[OPEN_MAX];
+	// struct file_handle* t_file_table[OPEN_MAX];
 
 
 	/* add more here as needed */

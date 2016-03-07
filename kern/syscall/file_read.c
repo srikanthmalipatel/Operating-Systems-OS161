@@ -29,7 +29,7 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 
 	}
 
-	struct file_handle* fh = get_file_handle(curthread->t_file_table, fd);
+	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);
 	
 	if(fh == NULL)
 		return EBADF;
