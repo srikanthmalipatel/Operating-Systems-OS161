@@ -147,7 +147,7 @@ thread_create(const char *name)
 
 	/* If you add to struct thread, be sure to initialize here */
 
-	file_table_init(thread->t_file_table);
+//	file_table_init(thread->t_file_table);
 	return thread;
 }
 
@@ -280,7 +280,6 @@ thread_destroy(struct thread *thread)
 
 
     kprintf("[thread_destroy] Destroying thread - %s and Current thread - %s\n", thread->t_name, curthread->t_name);
-   //ANIRUDH - clean up file table here?. when to erase the file handles. when the ref count becomes 0;
 	kfree(thread->t_name);
 	kfree(thread);
 }

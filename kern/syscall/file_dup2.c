@@ -8,7 +8,7 @@
 #include <lib.h>
 #include <vfs.h>
 #include <current.h>
-
+#include <proc.h>
 int sys_dup2(int oldfd, int newfd, int* retval)
 {
 	
@@ -25,18 +25,18 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 		*retval = newfd;
 		return 0;
 	}
-	struct file_handle* fh = get_file_handle(curthread->t_file_table, oldfd);
+	struct file_handle* fh = get_file_handle(curproc->t_file_table, oldfd);
 	
 	if(fh == NULL)
 		return EBADF;
 
 	lock_acquire(fh->fh_lock); // what if another process is doing something else on the same file handle while it is trying to move it.
 
-	struct file_handle* fh1 = get_file_handle(curthread->t_file_table, newfd);
+	struct file_handle* fh1 = get_file_handle(curproc->t_file_table, newfd);
 	if(fh1 == NULL)
 	{
 		// directly copy
-		curthread->t_file_table[newfd] = fh;
+		curproc->t_file_table[newfd] = fh;
 		fh->ref_count += 1;
 	
 	}
@@ -44,7 +44,7 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 	{
 		// call close on the new file;
 		sys_close(newfd);
-		curthread->t_file_table[newfd] = fh;
+		curproc->t_file_table[newfd] = fh;
 		fh->ref_count += 1;
 	
 	

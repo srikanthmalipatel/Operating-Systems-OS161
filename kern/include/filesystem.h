@@ -1,3 +1,7 @@
+
+#ifndef _FILESYSTEM_H_
+#define _FILESYSTEM_H_
+
 #include<vnode.h>
 #include<synch.h>
 #include<limits.h>
@@ -25,3 +29,5 @@ bool is_valid_flag(int);
 bool can_read(int);
 bool can_write(int);
 bool is_append(int);
+
+#endif // FILESYSTEM_H

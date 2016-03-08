@@ -9,6 +9,7 @@
 #include <current.h>
 #include <kern/stat.h>
 #include <kern/seek.h>
+#include <proc.h>
 
 off_t sys_lseek(int fd, off_t pos, int whence, off_t* retval)
 {
@@ -19,7 +20,7 @@ off_t sys_lseek(int fd, off_t pos, int whence, off_t* retval)
 	if(fd < 0 || fd >= OPEN_MAX)
 		return EBADF;	
 
-	struct file_handle* fh = get_file_handle(curthread->t_file_table, fd);
+	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);
 	
 	if(fh == NULL)
 		return EBADF;

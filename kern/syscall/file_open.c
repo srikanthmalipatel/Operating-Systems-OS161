@@ -8,7 +8,7 @@
 #include <vfs.h>
 #include <current.h>
 #include <kern/stat.h>
-
+#include <proc.h>
 int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 {
 
@@ -33,7 +33,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 		return EFAULT;
 	}
 
-	int fd = get_free_file_descriptor(curthread->t_file_table);
+	int fd = get_free_file_descriptor(curproc->t_file_table);
 	if(fd == -1)
 		return EMFILE;
 	
@@ -86,7 +86,7 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 	else
 		fh->offset = 0; // check if O_APPEND is passed, if yes, then use VOP_STAT to get the file size and update offset with the file size.
 	
-	curthread->t_file_table[fd] = fh;
+	curproc->t_file_table[fd] = fh;
 
 	return 0;
 

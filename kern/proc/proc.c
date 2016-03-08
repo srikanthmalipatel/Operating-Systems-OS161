@@ -49,7 +49,6 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <pid.h>
-
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
@@ -85,6 +84,8 @@ proc_create(const char *name)
 
     proc->pid = -1;
     proc->ppid = -1;
+ 	
+ 	file_table_init(proc->t_file_table);
 
     proc->p_self = NULL;
     proc->p_exitsem = sem_create("exitsem", 0);
@@ -118,6 +119,8 @@ proc_destroy(struct proc *proc)
 	 * reference to this structure. (Otherwise it would be
 	 * incorrect to destroy it.)
 	 */
+
+	file_table_cleanup(proc->t_file_table);
 
 	/* VFS fields */
 	if (proc->p_cwd) {
