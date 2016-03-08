@@ -10,20 +10,6 @@
 #include <mips/trapframe.h>
 #include <kern/sys_fork.h> /* Definintion for sys_fork() */
 
-static void enter_child_fork(void* ptr, unsigned long args) {
-    struct trapframe childtf;
-    bzero(&childtf, sizeof(childtf));
-    childtf = *(struct trapframe *)ptr;
-    childtf.tf_v0 = 0;
-    childtf.tf_a3 = 0;
-    childtf.tf_epc += 4;
-    // load and activate the address space
-    struct addrspace* as = (struct addrspace *)args;
-    proc_setas(as);
-    as_activate();
-
-    mips_usermode(&childtf);
-}
 
 int sys_fork(struct trapframe* tf, int* retval) {
     struct proc *newproc;
@@ -34,7 +20,8 @@ int sys_fork(struct trapframe* tf, int* retval) {
     *childtf = *tf;
     
     // create process
-    newproc = proc_create_runprogram("user process");
+    const char *name = "user process";
+    newproc = proc_create_runprogram(name);
     if (newproc == NULL) {
         return ENOMEM;
     }
@@ -49,18 +36,20 @@ int sys_fork(struct trapframe* tf, int* retval) {
     newproc->ppid = curproc->pid;
 
     // copy the parent address space
-    result = as_copy(curproc->p_addrspace, &newproc->p_addrspace); 
+    /*result = as_copy(curproc->p_addrspace, &newproc->p_addrspace); 
     if (result) {
         proc_destroy(newproc);
         dealloc_pid(newproc);
         return result;
-    }
+    }*/
 
     // create a child thread and pass trapframe and address space
-    result = thread_fork_proc("proc thread",
+    char buffer[50] = {0};
+    snprintf(buffer, 50, "%s #%d", "userthread", newproc->pid);
+    result = thread_fork(buffer,
             newproc,
-            enter_child_fork,
-            (void *) childtf, (unsigned long) newproc->p_addrspace);
+            enter_forked_process,
+            (void *) childtf, 0);//(unsigned long) newproc->p_addrspace);
     if (result) {
         dealloc_pid(newproc);
         proc_destroy(newproc);

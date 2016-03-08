@@ -14,14 +14,15 @@ int sys__exit(int exitcode) {
     KASSERT(proc != NULL);
 
     // first we need to exit the current thread. So that it moves to zombie state and will be cleaned up.
+    //kprintf("[sys__exit] Exiting thread - %s\n", curthread->t_name);
     thread_exit();
-    if(check_ppid_exists(proc)) {
+    //if(check_ppid_exists(proc)) {
         proc->exited = true;
         proc->exitcode = _MKWAIT_EXIT(exitcode);
         V(proc->p_exitsem);
-    } else {
+    /*} else {
         dealloc_pid(proc);
         proc_destroy(proc);
-    }
+    }*/
     return 0;
 }

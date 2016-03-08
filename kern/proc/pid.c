@@ -19,7 +19,6 @@ struct procManager* init_pid_manager() {
         kfree(pm);
         return NULL;
     }
-    KASSERT(pm->p_lock != NULL);
     int i;
     for(i=0; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
@@ -48,8 +47,8 @@ pid_t alloc_pid(struct proc *userproc) {
     //lock_acquire(p_manager->p_lock);
 	for(i=2; i<__MAX_PROC; i++) {
 		if(p_manager->p_table[i] == NULL)
-            //lock_release(p_manager->p_lock);
             p_manager->p_table[i] = userproc;
+            //lock_release(p_manager->p_lock);
 			return i; 
     }
     //lock_release(p_manager->p_lock);
@@ -72,10 +71,13 @@ int dealloc_pid(struct proc *userproc) {
 
 bool check_ppid_exists(struct proc *userproc) {
     int i;
+    //lock_acquire(p_manager->p_lock);
     for(i=2; i<__MAX_PROC; i++) {
         if(i == userproc->ppid) {
+            //lock_release(p_manager->p_lock);
             return true;
         }
     }
+    //lock_release(p_manager->p_lock);
     return false;
 }

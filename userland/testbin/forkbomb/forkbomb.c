@@ -55,15 +55,17 @@ static volatile int pid;
 int
 main(void)
 {
-	int i;
+	//int i;
 
-	while (1) {
+    pid = fork();
+    return 0;
+    /*while (1) {
 		fork();
 
-		pid = getpid();
+		pid = getpid();*/
 
 		/* Make sure each fork has its own address space. */
-		for (i=0; i<300; i++) {
+		/*for (i=0; i<300; i++) {
 			volatile int seenpid;
 			seenpid = pid;
 			if (seenpid != getpid()) {
@@ -72,5 +74,5 @@ main(void)
 				     seenpid, getpid());
 			}
 		}
-	}
+	}*/
 }

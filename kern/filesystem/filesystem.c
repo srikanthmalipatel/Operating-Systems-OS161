@@ -12,7 +12,8 @@
 #include <proc.h>
 #include <current.h>
 #include <synch.h>
- #include <kern/fcntl.h>
+#include <kern/fcntl.h>
+#include <file_close.h>
 void file_table_init(struct file_handle** ft)
 {
 	for(int i = 0; i < OPEN_MAX; i++)
@@ -68,12 +69,23 @@ struct file_handle* file_handle_create()
 // called when thread is abruptly destroyed with files still open,call close on  all the files this thread is currently holding.
 void file_table_cleanup(struct file_handle** ft)
 {
-	(void)ft;
-     	
+	if(ft == NULL)
+	        return;
+    
+    for(int i = 0 ; i < OPEN_MAX; i++)
+    {
+        if(ft[i] != NULL)
+        {
+            if(ft[i]->ref_count == 1)
+                sys_close(i);
+            else
+                ft[i]->ref_count --;
 
-
-
-
+            ft[i] = NULL;
+        
+        } 
+    }
+    kfree(*ft);
 }
 
 struct file_handle* get_file_handle(struct file_handle** ft, int fd)

@@ -47,6 +47,7 @@
 #include <file_chdir.h>
 #include <copyinout.h>
 #include <kern/sys_exit.h>
+#include <proc.h>
 /*
  * System call dispatcher.
  *
@@ -261,7 +262,20 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void* ptr, unsigned long args)
 {
-	(void)tf;
+    //panic("test");
+    //while(1) {}
+	struct trapframe childtf;
+    bzero(&childtf, sizeof(childtf));
+    childtf = *(struct trapframe *) ptr;
+    childtf.tf_v0 = 0;
+    childtf.tf_a3 = 0;
+    childtf.tf_epc += 4;
+    // load and activate the address space
+    struct addrspace* as = (struct addrspace *) args;
+    proc_setas(as);
+    as_activate();
+
+    mips_usermode(&childtf);
 }
