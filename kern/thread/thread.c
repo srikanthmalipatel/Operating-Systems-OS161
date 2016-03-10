@@ -278,9 +278,6 @@ thread_destroy(struct thread *thread)
 	/* sheer paranoia */
 	thread->t_wchan_name = "DESTROYED";
 
-
-    kprintf("[thread_destroy] Destroying thread - %s and Current thread - %s\n", thread->t_name, curthread->t_name);
-	kfree(thread->t_name);
 	kfree(thread);
 }
 
@@ -299,7 +296,6 @@ exorcise(void)
 	while ((z = threadlist_remhead(&curcpu->c_zombies)) != NULL) {
 		KASSERT(z != curthread);
 		KASSERT(z->t_state == S_ZOMBIE);
-		kprintf("[exorcise] Found zombie thread - %s by current thread - %s \n", z->t_name, curthread->t_name);
 		thread_destroy(z);
 	}
 }
@@ -525,7 +521,6 @@ thread_fork(const char *name,
 	if (proc == NULL) {
 		proc = curthread->t_proc;
 	}
-	kprintf("Adding new thread %p to process %p\n", newthread, proc);
 	result = proc_addthread(proc, newthread);
 	if (result) {
 		/* thread_destroy will clean up the stack */
@@ -814,7 +809,6 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
 
 	cur = curthread;
 
-    kprintf("[thread_startup] Starting thread - %s \n", cur->t_name);
 	/* Clear the wait channel and set the thread state. */
 	cur->t_wchan_name = NULL;
 	cur->t_state = S_RUN;
@@ -825,7 +819,6 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
 	/* Activate our address space in the MMU. */
 	as_activate();
 
-    kprintf("clean up zombie threads \n");
 	/* Clean up dead threads. */
 	exorcise();
 
@@ -859,10 +852,9 @@ thread_exit(void)
 {
 	struct thread *cur;
 
-    kprintf("[thread_exit] Exiting thread %s\n", curthread->t_name);
+    //kprintf("[thread_exit] Exiting thread %s\n", curthread->t_name);
 	cur = curthread;
 
-    file_table_cleanup(curthread->t_file_table);
 	/*
 	 * Detach from our process. You might need to move this action
 	 * around, depending on how your wait/exit works.

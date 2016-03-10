@@ -91,12 +91,12 @@ runprogram(char *progname)
 	vfs_close(v);
 
 	/* Define the user stack in the address space */
-/*	result = as_define_stack(as, &stackptr);
+	result = as_define_stack(as, &stackptr);
 	if (result) {
 		// p_addrspace will go away when curproc is destroyed 
 		return result;
-	}*/
-
+	}
+    
 	struct vnode* v1;
 	struct vnode* v2;
 	struct vnode* v3;
@@ -148,13 +148,11 @@ runprogram(char *progname)
 	strcpy(fh3->file_name, "con:");
 	curproc->t_file_table[2] = fh3;
 
-
 	/* Define the user stack in the address space */
-	result = as_define_stack(as, &stackptr);
+	/*result = as_define_stack(as, &stackptr);
 	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
 		return result;
-	}
+	}*/
 	/* Warp to user mode. */
 	//kprintf("[run program] releasing semaphore \n");
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,

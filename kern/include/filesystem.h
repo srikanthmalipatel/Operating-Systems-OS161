@@ -19,6 +19,7 @@ struct file_handle
 
 
 void file_table_cleanup(struct file_handle** );
+void file_table_copy(struct file_handle **ft1, struct file_handle **ft2);
 struct file_handle* file_handle_create(void);
 struct file_handle* get_file_handle(struct file_handle**, int);
 void file_table_init(struct file_handle** );

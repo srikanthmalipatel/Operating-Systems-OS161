@@ -57,7 +57,6 @@ struct procManager *p_manager;
 /*
  * Create a proc structure.
  */
-static
 struct proc *
 proc_create(const char *name)
 {
@@ -85,12 +84,13 @@ proc_create(const char *name)
     proc->pid = -1;
     proc->ppid = -1;
  	
- 	file_table_init(proc->t_file_table);
 
     proc->p_self = NULL;
     proc->p_exitsem = sem_create("exitsem", 0);
     proc->exited = false;
-    proc->exitcode = -1;
+    proc->exitcode = 0;
+
+ 	file_table_init(proc->t_file_table);
 	return proc;
 }
 
@@ -191,12 +191,11 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
-    // initalize process manager
-    p_manager = init_pid_manager();
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+    p_manager = init_pid_manager();
 }
 
 /*
@@ -232,7 +231,7 @@ proc_create_runprogram(const char *name)
 		newproc->p_cwd = curproc->p_cwd;
 	}
 	spinlock_release(&curproc->p_lock);
-
+    newproc->pid = alloc_pid(newproc);
 	return newproc;
 }
 

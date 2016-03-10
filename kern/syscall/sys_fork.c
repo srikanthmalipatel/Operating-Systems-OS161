@@ -17,11 +17,13 @@ int sys_fork(struct trapframe* tf, int* retval) {
 
     // copy the parents trapframe into kernel heap 
     struct trapframe* childtf = (struct trapframe*) kmalloc(sizeof(struct trapframe));
+    if(childtf == NULL) {
+        return ENOMEM;
+    }
     *childtf = *tf;
     
     // create process
-    const char *name = "user process";
-    newproc = proc_create_runprogram(name);
+    newproc = proc_create("user process");
     if (newproc == NULL) {
         return ENOMEM;
     }
@@ -36,24 +38,27 @@ int sys_fork(struct trapframe* tf, int* retval) {
     newproc->ppid = curproc->pid;
 
     // copy the parent address space
-    /*result = as_copy(curproc->p_addrspace, &newproc->p_addrspace); 
+    struct addrspace* c_addrspace;
+    result = as_copy(curproc->p_addrspace, &c_addrspace); 
     if (result) {
-        proc_destroy(newproc);
-        dealloc_pid(newproc);
+        kfree(childtf);
+        //dealloc_pid(newproc);
+        //proc_destroy(newproc);
         return result;
-    }*/
+    }
+
+    file_table_copy(curproc->t_file_table, newproc->t_file_table);
 
     // create a child thread and pass trapframe and address space
-    char buffer[50] = {0};
-    snprintf(buffer, 50, "%s #%d", "userthread", newproc->pid);
-    result = thread_fork(buffer,
+    result = thread_fork("user process",
             newproc,
             enter_forked_process,
-            (void *) childtf, 0);//(unsigned long) newproc->p_addrspace);
+            (void *) childtf, (unsigned long) c_addrspace);
     if (result) {
-        dealloc_pid(newproc);
-        proc_destroy(newproc);
-        return result;
+        kfree(childtf);
+        //dealloc_pid(newproc);
+        //proc_destroy(newproc);
+        return ENOMEM;
     }
 
     // return child pid to parent

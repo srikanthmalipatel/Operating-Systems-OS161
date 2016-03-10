@@ -46,7 +46,7 @@
  * (*) The Administrative Board of Harvard College handles formal
  * disciplinary action.
  */
-#include <stdio.h>
+
 #include <unistd.h>
 #include <err.h>
 
@@ -55,14 +55,17 @@ static volatile int pid;
 int
 main(void)
 {
-	int i;
-    while (1) {
+	//int i;
+
+    pid = fork();
+    return 0;
+    /*while (1) {
 		fork();
 
-		pid = getpid();
+		pid = getpid();*/
 
 		/* Make sure each fork has its own address space. */
-		for (i=0; i<300; i++) {
+		/*for (i=0; i<300; i++) {
 			volatile int seenpid;
 			seenpid = pid;
 			if (seenpid != getpid()) {
@@ -71,5 +74,5 @@ main(void)
 				     seenpid, getpid());
 			}
 		}
-	}
+	}*/
 }

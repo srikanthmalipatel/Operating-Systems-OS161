@@ -86,6 +86,21 @@ void file_table_cleanup(struct file_handle** ft)
         } 
     }
     kfree(*ft);
+    ft = NULL;
+}
+
+void file_table_copy(struct file_handle **ft1, struct file_handle **ft2) {
+    if(ft1 == NULL || ft2 == NULL)
+        return;
+    for(int i=0; i<OPEN_MAX; i++) {
+        if(ft1[i] != NULL) {
+            lock_acquire(ft1[i]->fh_lock);
+            ft2[i] = ft1[i];
+            ft1[i]->ref_count++;
+            lock_release(ft1[i]->fh_lock);
+        }
+    }
+    return;
 }
 
 struct file_handle* get_file_handle(struct file_handle** ft, int fd)
@@ -107,6 +122,7 @@ void file_handle_destroy (struct file_handle* fh)
 //	kfree(fh->file_name);
 	fh->file = NULL;
 	kfree(fh);
+	fh = NULL;
 
 }
 

@@ -47,6 +47,7 @@
 #include "opt-synchprobs.h"
 #include "opt-automationtest.h"
 #include <synch.h>
+#include <kern/sys_wait.h>
 /*
  * In-kernel menu and command dispatcher.
  */
@@ -54,6 +55,13 @@
 #define _PATH_SHELL "/bin/sh"
 
 #define MAXMENUARGS  16
+
+static
+void wait(pid_t pid, int *status, int options) {
+    int retval = 0;
+    sys_waitpid(pid, (userptr_t) status, options, &retval);
+    return;
+}
 
 ////////////////////////////////////////////////////////////
 //
@@ -94,7 +102,7 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	strcpy(progname, args[0]);
 
 	result = runprogram(progname);
-    V(consolesem);
+    //V(consolesem);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
@@ -133,21 +141,19 @@ common_prog(int nargs, char **args)
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
-    P(consolesem);
+    //P(consolesem);
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
 		return result;
 	}
-
-
-	// acquire lock here.
+	int status;
+    wait(proc->pid, &status, 0);
 
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
 	 */
-
 	return 0;
 }
 
@@ -816,13 +822,13 @@ menu(char *args)
 {
 	char buf[64];
 
-	menu_execute(args, 1);
-
-    // Initalize a semaphore for locking console
     consolesem = sem_create("consolesem", 0);
     if (consolesem == NULL) {
 	    panic("consolesem: sem_create failed\n");
     }
+	menu_execute(args, 1);
+
+    // Initalize a semaphore for locking console
 	
 	while (1) {
 		/*

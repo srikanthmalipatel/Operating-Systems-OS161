@@ -14,13 +14,13 @@ struct procManager* init_pid_manager() {
     pm = (struct procManager *) kmalloc(sizeof(struct procManager));
     if(pm == NULL)
         return NULL;
-    pm->p_lock = lock_create("proc lock");
-    if(pm->p_lock == NULL) {
+    pm->p_sem = sem_create("pid sem",0);
+    if(pm->p_sem == NULL) {
         kfree(pm);
-        return NULL;
+        panic("lock create failed");
     }
     int i;
-    for(i=0; i<__MAX_PROC; i++) {
+    for(i=2; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
     }
     return pm;
@@ -29,10 +29,13 @@ struct procManager* init_pid_manager() {
 void destroy_pid_manager(struct procManager *pm) {
     KASSERT(pm != NULL);
     //lock_acquire(pm->p_lock);
+    V(pm->p_sem);
     int i;
     for(i=0; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
     }
+    P(pm->p_sem);
+    sem_destroy(pm->p_sem);
     //lock_release(pm->p_lock);
     //lock_destroy(pm->p_lock);
     kfree(pm);
@@ -43,41 +46,65 @@ void destroy_pid_manager(struct procManager *pm) {
 // first process will be kernel thread
 // second process is the process created by run program
 pid_t alloc_pid(struct proc *userproc) {
-    int i;
+    int i, result = -1;
     //lock_acquire(p_manager->p_lock);
+    V(p_manager->p_sem);
 	for(i=2; i<__MAX_PROC; i++) {
-		if(p_manager->p_table[i] == NULL)
+		if(p_manager->p_table[i] == NULL) {
             p_manager->p_table[i] = userproc;
             //lock_release(p_manager->p_lock);
-			return i; 
+            result = i;
+            break;
+        }
     }
+    P(p_manager->p_sem);
     //lock_release(p_manager->p_lock);
-    return -1;
+    return result;
 }
 
 int dealloc_pid(struct proc *userproc) {
-    int i;
+    int i, result = -1;
     //lock_acquire(p_manager->p_lock);
+    V(p_manager->p_sem);
     for(i=2; i<__MAX_PROC; i++) {
         if(i == userproc->pid) {
             p_manager->p_table[i] = NULL;
             //lock_release(p_manager->p_lock);
-            return 1;
+            result = i;
+            break;
         }
     }
+    P(p_manager->p_sem);
     //lock_release(p_manager->p_lock);
-    return 0;
+    return result;
+}
+
+struct proc* get_proc_pid(pid_t pid) {
+    int i;
+    struct proc *result;
+    V(p_manager->p_sem);
+    for(i=2; i<__MAX_PROC; i++) {
+        if(i == pid) {
+            result = p_manager->p_table[i];
+            break;
+        }
+    }
+    P(p_manager->p_sem);
+    return result;
 }
 
 bool check_ppid_exists(struct proc *userproc) {
-    int i;
+    bool exists = false, i;
     //lock_acquire(p_manager->p_lock);
+    V(p_manager->p_sem);
     for(i=2; i<__MAX_PROC; i++) {
         if(i == userproc->ppid) {
             //lock_release(p_manager->p_lock);
-            return true;
+            exists = true;
+            break;
         }
     }
+    P(p_manager->p_sem);
     //lock_release(p_manager->p_lock);
-    return false;
+    return exists;
 }

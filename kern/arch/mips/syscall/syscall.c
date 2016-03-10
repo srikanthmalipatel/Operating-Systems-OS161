@@ -47,6 +47,7 @@
 #include <file_chdir.h>
 #include <copyinout.h>
 #include <kern/sys_exit.h>
+#include <kern/sys_wait.h>
 #include <proc.h>
 /*
  * System call dispatcher.
@@ -217,6 +218,9 @@ syscall(struct trapframe *tf)
             break;
         case SYS__exit:
             err = sys__exit(tf->tf_a0);
+            break;
+        case SYS_waitpid:
+            err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
             break;
 	    default:
 		    kprintf("Unknown syscall %d\n", callno);
