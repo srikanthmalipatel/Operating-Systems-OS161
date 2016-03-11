@@ -55,6 +55,9 @@ int sys_open(const_userptr_t filename, int flags, int mode, int* retval)
 
 	}
 
+	if(strlen(kern_file_name) == 0)
+		return EINVAL;
+
 	char kern_file_name_copy[NAME_MAX + 1]; // using this because kern_file_name gets modified inside vfs_open.
 	memset(kern_file_name_copy , 0, NAME_MAX + 1);
 	strcpy(kern_file_name_copy, kern_file_name);
