@@ -10,6 +10,7 @@
 #include <kern/stat.h>
 #include <kern/seek.h>
 #include <proc.h>
+#include <vnode.h>
 
 off_t sys_lseek(int fd, off_t pos, int whence, off_t* retval)
 {
@@ -27,9 +28,12 @@ off_t sys_lseek(int fd, off_t pos, int whence, off_t* retval)
 
 	//lseek on devices should fail. right now i only  know "con:" and "null:"
 	// which other devices should i add here. AST TA !!!
+	if(!VOP_ISSEEKABLE(fh->file))
+		return ESPIPE;
+/*
 	if(strcmp(fh->file_name, "con:") == 0 || strcmp(fh->file_name, "null:") == 0)
 		return ESPIPE;
-
+*/
 	lock_acquire(fh->fh_lock);
 
 	if(whence == SEEK_SET)
