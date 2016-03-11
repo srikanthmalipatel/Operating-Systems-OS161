@@ -18,11 +18,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     vaddr_t entrypoint, stackptr;
     int result;
 
-    if(progname == NULL || arguments == NULL) {
-        return EFAULT;
-    }
-
-
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
    
@@ -34,6 +29,10 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     if(result) {
         kfree(_progname);
         return EFAULT;
+    }
+    if(strlen(_progname) == 0) {
+        kfree(_progname);
+        return EINVAL;
     }
     char **args = (char **) kmalloc(sizeof(char *));
     result = copyin((const_userptr_t)arguments, args, sizeof(char **));

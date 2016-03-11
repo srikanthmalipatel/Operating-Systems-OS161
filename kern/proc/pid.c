@@ -81,7 +81,7 @@ int dealloc_pid(struct proc *userproc) {
 
 struct proc* get_proc_pid(pid_t pid) {
     int i;
-    struct proc *result;
+    struct proc *result = NULL;
     V(p_manager->p_sem);
     for(i=2; i<__MAX_PROC; i++) {
         if(i == pid) {

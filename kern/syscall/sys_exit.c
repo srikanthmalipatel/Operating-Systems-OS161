@@ -19,10 +19,10 @@ int sys__exit(int exitcode) {
     // first we need to exit the current thread. So that it moves to zombie state and will be cleaned up.
     //kprintf("[sys__exit] Exiting thread - %s\n", curthread->t_name);
 //    if(check_ppid_exists(proc)) {
-       file_table_cleanup();
-       proc->exited = true;
-        proc->exitcode = _MKWAIT_EXIT(exitcode);
-        V(proc->p_exitsem);
+    file_table_cleanup();
+    proc->exited = true;
+    proc->exitcode = _MKWAIT_EXIT(exitcode);
+    V(proc->p_exitsem);
     thread_exit();
 /*    } else {
         dealloc_pid(proc);

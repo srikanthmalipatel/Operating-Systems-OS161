@@ -146,8 +146,7 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
-	int status;
-    wait(proc->pid, &status, 0);
+    wait(proc->pid, NULL, 0);
 
 	/*
 	 * The new process will be destroyed when the program exits...
