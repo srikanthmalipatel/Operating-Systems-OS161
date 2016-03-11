@@ -13,7 +13,7 @@
 #include <proc.h>
 int sys_getcwd(userptr_t buf, size_t len)
 {
-	if(buf == NULL)
+	if(buf == NULL || len > PATH_MAX)
 		return EFAULT;
 
 	int result;
