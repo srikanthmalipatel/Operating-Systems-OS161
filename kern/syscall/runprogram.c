@@ -44,6 +44,8 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <copyinout.h>
+
 /*
  * Load program "progname" and start running it in usermode.
  * Does not return except on error.
@@ -52,7 +54,7 @@
  */
 
 int
-runprogram(char *progname)
+runprogram(char *progname, char **args)
 {
 	struct addrspace *as;
 	struct vnode *v;
@@ -149,13 +151,63 @@ runprogram(char *progname)
 	curproc->t_file_table[2] = fh3;
 
 	/* Define the user stack in the address space */
-	/*result = as_define_stack(as, &stackptr);
-	if (result) {
-		return result;
-	}*/
+	int index = 0;
+	while(args[index] != NULL) {
+		index++;
+	}
+	char ** allargs=(char**)kmalloc(sizeof(char*)*index);
+	index = 0;
+
+	while(args[index] != NULL) {
+		char * arg;
+		int len = strlen(args[index]) + 1; // +1 for Null terminator \0
+
+		int oglen = len;
+		if(len % 4 != 0) {
+			len = len + (4 - len % 4);
+		}
+
+		arg=kmalloc(sizeof(len));
+		arg= kstrdup(args[index]);
+
+		for(int i=0; i < len; i++) {
+
+			if(i>=oglen)
+				arg[i]= '\0';
+			else
+				arg[i]=args[index][i];
+		}
+
+		stackptr -= len;
+
+		result = copyout((const void *)arg, (userptr_t)stackptr, (size_t)len);
+		if(result) {
+			kprintf("RunProgram- copyout1 failed %d\n",result);
+			return result;
+		}
+
+		kfree(arg);
+		allargs[index]=(char *)stackptr;
+
+		index++;
+	}
+
+	if(args[index]==NULL){
+		stackptr -= 4 * sizeof(char);
+	}
+
+	for(int i=(index-1); i>= 0;i--) {
+		stackptr=stackptr-sizeof(char*);
+		result = copyout((const void *)(allargs+i), (userptr_t)stackptr, (sizeof(char *)));
+		if(result) {
+			kprintf("RunProgram- copyout2 failed, Result %d, Array Index %d\n",result, i);
+			return result;
+		}
+	}
+
 	/* Warp to user mode. */
 	//kprintf("[run program] releasing semaphore \n");
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+	enter_new_process(index /*argc*/, (userptr_t) stackptr /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
 			  stackptr, entrypoint);
 

@@ -87,28 +87,27 @@ cmd_progthread(void *ptr, unsigned long nargs)
 {
     //kprintf("[cmd_progthread] Acquiring seamphore \n");
 	char **args = ptr;
+	char *rargs[20];
 	char progname[128];
-	int result;
+	int result, i=0;
 
 	KASSERT(nargs >= 1);
-
-	if (nargs > 2) {
-		kprintf("Warning: argument passing from menu not supported\n");
-	}
-
+    //rargs = (char**) kmalloc(sizeof(char *)*((int)nargs+1));
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
-
-	result = runprogram(progname);
+    for(i=0; i<(int)nargs; i++) {
+        rargs[i] = kstrdup(args[i]);
+    }
+    rargs[nargs] = NULL;
+	result = runprogram(progname, rargs);
     //V(consolesem);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
 		return;
 	}
-    
 	/* NOTREACHED: runprogram only returns on error. */
 }
 
