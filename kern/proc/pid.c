@@ -20,7 +20,7 @@ struct procManager* init_pid_manager() {
         panic("lock create failed");
     }
     int i;
-    for(i=2; i<__MAX_PROC; i++) {
+    for(i=0; i<__MAX_PROC; i++) {
         pm->p_table[i] = NULL;
     }
     return pm;
