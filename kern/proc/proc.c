@@ -120,7 +120,7 @@ proc_destroy(struct proc *proc)
 	 * incorrect to destroy it.)
 	 */
 
-	file_table_cleanup(proc->t_file_table);
+//	file_table_cleanup(proc->t_file_table);
 
 	/* VFS fields */
 	if (proc->p_cwd) {

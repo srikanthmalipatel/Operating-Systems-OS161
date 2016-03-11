@@ -61,7 +61,7 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 	}
 
 	if (u.uio_resid != 0) {
-		kprintf("ELF: short read on segment - file truncated?\n");
+//		kprintf("ELF: short read on segment - file truncated?\n");
 	}
 
 	// should update offset in the file handle.use lock. uio_offset will be updated. can use it directly.

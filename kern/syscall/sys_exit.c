@@ -8,6 +8,7 @@
 #include <proc.h>
 #include <pid.h>
 #include <kern/wait.h>
+#include <filesystem.h>
 
 int sys__exit(int exitcode) {
     struct proc* proc = curproc;
@@ -18,7 +19,8 @@ int sys__exit(int exitcode) {
     // first we need to exit the current thread. So that it moves to zombie state and will be cleaned up.
     //kprintf("[sys__exit] Exiting thread - %s\n", curthread->t_name);
 //    if(check_ppid_exists(proc)) {
-        proc->exited = true;
+       file_table_cleanup();
+       proc->exited = true;
         proc->exitcode = _MKWAIT_EXIT(exitcode);
         V(proc->p_exitsem);
     thread_exit();
