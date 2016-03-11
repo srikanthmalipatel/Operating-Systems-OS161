@@ -9,7 +9,7 @@
 #include <test.h>
 #include <mips/trapframe.h>
 #include <kern/sys_fork.h> /* Definintion for sys_fork() */
-
+#include <vnode.h>
 
 int sys_fork(struct trapframe* tf, int* retval) {
     struct proc *newproc;
@@ -37,6 +37,12 @@ int sys_fork(struct trapframe* tf, int* retval) {
     }
     newproc->ppid = curproc->pid;
 
+	spinlock_acquire(&curproc->p_lock);
+	if (curproc->p_cwd != NULL) {
+		VOP_INCREF(curproc->p_cwd);
+		newproc->p_cwd = curproc->p_cwd;
+	}
+	spinlock_release(&curproc->p_lock);
     // copy the parent address space
     struct addrspace* c_addrspace;
     result = as_copy(curproc->p_addrspace, &c_addrspace); 
