@@ -204,7 +204,7 @@ proc_bootstrap(void)
     p_manager = init_pid_manager();
     execsem = sem_create("exec sem", 1);
     if(execsem == NULL) {
-        kfree(proc);
+        kfree(kproc);
         return;
     }
 }
