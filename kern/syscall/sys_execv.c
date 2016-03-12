@@ -24,7 +24,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
-   
+    P(execsem);
     char *_progname;
     size_t size;
     int i=0, count=0;
@@ -216,6 +216,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     kfree(_progname);
     kfree(args);*/
+    V(execsem);
 
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 
