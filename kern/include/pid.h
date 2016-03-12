@@ -10,7 +10,7 @@
 
 #include<kern/limits.h>
 
-#define __MAX_PROC 256 
+#define __MAX_PROC 64
 
 struct procManager {
     struct semaphore* p_sem;                    // updating file table must be an atomic and mutually exclusive

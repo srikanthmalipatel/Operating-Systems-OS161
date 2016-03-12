@@ -12,6 +12,8 @@
 
 int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 {
+	if(fd < 0 || fd > OPEN_MAX )
+		return EBADF; 
 
 	if(buf == NULL) // does VOP_WRITE take care of this for us.?
 		return EFAULT;
@@ -31,8 +33,8 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	}
 
 
-	if(fd < 0 || fd >= OPEN_MAX )
-		return EBADF;
+/*	if(fd < 0 || fd >= OPEN_MAX )
+		return EBADF;*/
 	
 	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);
 	if(fh == NULL)
