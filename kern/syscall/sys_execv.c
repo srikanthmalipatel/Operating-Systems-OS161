@@ -29,8 +29,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     char *_progname;
     size_t size;
     int i=0, count=0;
-    _progname = (char *) kmalloc(sizeof(char)*1024);
-    result = copyinstr(progname, _progname, 1024, &size);
+    _progname = (char *) kmalloc(sizeof(char)*PATH_MAX);
+    result = copyinstr(progname, _progname, PATH_MAX, &size);
     if(result) {
         kfree(_progname);
         return EFAULT;
@@ -40,7 +40,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         return EINVAL;
     }
     P(esem);
-    char *args = (char *) kmalloc(sizeof(char)*4096);
+    char *args = (char *) kmalloc(sizeof(char)*ARG_MAX);
     result = copyinstr((const_userptr_t)arguments, args, ARG_MAX, &size);
     if(result) {
         kfree(args);
@@ -48,7 +48,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         return EFAULT;
     }
     /* Copy the user arguments on to the kernel */
-
+   
     int offset = 0;
     while((char *) arguments[count] != NULL) {
         result = copyinstr((const_userptr_t) arguments[count], args+offset, ARG_MAX, &size);
