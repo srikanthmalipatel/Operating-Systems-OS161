@@ -25,12 +25,14 @@ int sys_fork(struct trapframe* tf, int* retval) {
     // create process
     newproc = proc_create("user process");
     if (newproc == NULL) {
+        kfree(childtf);
         return ENOMEM;
     }
     
     // allocate pid and assign ppid
     newproc->pid = alloc_pid(newproc);
     if (newproc->pid == -1) {
+        kfree(childtf);
         proc_destroy(newproc);
         // too many processes in the system
         return ENPROC;
@@ -48,8 +50,8 @@ int sys_fork(struct trapframe* tf, int* retval) {
     result = as_copy(curproc->p_addrspace, &c_addrspace); 
     if (result) {
         kfree(childtf);
-        //dealloc_pid(newproc);
-        //proc_destroy(newproc);
+        dealloc_pid(newproc);
+        proc_destroy(newproc);
         return result;
     }
 
@@ -62,8 +64,8 @@ int sys_fork(struct trapframe* tf, int* retval) {
             (void *) childtf, (unsigned long) c_addrspace);
     if (result) {
         kfree(childtf);
-        //dealloc_pid(newproc);
-        //proc_destroy(newproc);
+        dealloc_pid(newproc);
+        proc_destroy(newproc);
         return ENOMEM;
     }
 

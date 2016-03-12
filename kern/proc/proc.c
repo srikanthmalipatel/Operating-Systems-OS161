@@ -181,7 +181,7 @@ proc_destroy(struct proc *proc)
 	spinlock_cleanup(&proc->p_lock);
 
     sem_destroy(proc->p_exitsem);
-	kfree(proc->p_name);
+	//kfree(proc->p_name);
 	kfree(proc);
 }
 
