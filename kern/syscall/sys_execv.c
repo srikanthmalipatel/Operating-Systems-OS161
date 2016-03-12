@@ -19,6 +19,9 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     vaddr_t entrypoint, stackptr;
     int result;
 
+    if(arguments == NULL) {
+        return EFAULT;
+    }
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
    
@@ -36,14 +39,14 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         return EINVAL;
     }
 
-    /* Copy the user arguments on to the kernel */
-    char *args = (char *) kmalloc(sizeof(char)*ARG_MAX);
-    /*result = copyin((const_userptr_t)arguments, args, ARG_MAX);
+    char *args = (char *) kmalloc(sizeof(char)*4096);
+    result = copyinstr((const_userptr_t)arguments, args, ARG_MAX, &size);
     if(result) {
         kfree(args);
         kfree(_progname);
         return EFAULT;
-    }*/
+    }
+    /* Copy the user arguments on to the kernel */
 
     int offset = 0;
     while((char *) arguments[count] != NULL) {
