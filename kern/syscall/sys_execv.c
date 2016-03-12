@@ -18,6 +18,9 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     vaddr_t entrypoint, stackptr;
     int result;
 
+	if(arguments == NULL)
+		return EFAULT;
+
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
    
