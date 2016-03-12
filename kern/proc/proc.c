@@ -54,7 +54,8 @@
  */
 struct proc *kproc;
 struct procManager *p_manager;
-static struct semaphore *execsem;
+static struct semaphore *esem = NULL;
+extern struct semaphore *execsem;
 /*
  * Create a proc structure.
  */
@@ -202,11 +203,12 @@ proc_bootstrap(void)
 		panic("proc_create for kproc failed\n");
 	}
     p_manager = init_pid_manager();
-    execsem = sem_create("exec sem", 1);
+    esem = sem_create("exec sem", 1);
     if(execsem == NULL) {
         kfree(kproc);
         return;
     }
+    execsem = esem;
 }
 
 /*

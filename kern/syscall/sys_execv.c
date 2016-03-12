@@ -12,6 +12,8 @@
 #include <copyinout.h>
 #include <limits.h>
 
+struct semaphore *esem;
+
 int sys_execv(userptr_t progname, userptr_t *arguments) {
     struct proc *proc = curproc;
     struct addrspace *as;
@@ -24,7 +26,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
-    P(execsem);
+    P(esem);
     char *_progname;
     size_t size;
     int i=0, count=0;
@@ -216,7 +218,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     kfree(_progname);
     kfree(args);*/
-    V(execsem);
+    V(esem);
 
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 
