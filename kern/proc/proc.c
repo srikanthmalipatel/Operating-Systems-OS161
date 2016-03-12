@@ -54,7 +54,7 @@
  */
 struct proc *kproc;
 struct procManager *p_manager;
-static semaphore *execsem;
+static struct semaphore *execsem;
 /*
  * Create a proc structure.
  */
