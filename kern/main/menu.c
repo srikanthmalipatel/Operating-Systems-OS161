@@ -87,9 +87,8 @@ cmd_progthread(void *ptr, unsigned long nargs)
 {
     //kprintf("[cmd_progthread] Acquiring seamphore \n");
 	char **args = ptr;
-	char *rargs[20];
 	char progname[128];
-	int result, i=0;
+	int result;
 
 	KASSERT(nargs >= 1);
     //rargs = (char**) kmalloc(sizeof(char *)*((int)nargs+1));
@@ -97,11 +96,7 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
-    for(i=0; i<(int)nargs; i++) {
-        rargs[i] = kstrdup(args[i]);
-    }
-    rargs[nargs] = NULL;
-	result = runprogram(progname, rargs);
+	result = runprogram(progname);
     //V(consolesem);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
