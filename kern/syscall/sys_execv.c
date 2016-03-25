@@ -12,7 +12,7 @@
 #include <copyinout.h>
 #include <limits.h>
 
-struct semaphore *esem;
+extern struct semaphore* esem;
 
 int sys_execv(userptr_t progname, userptr_t *arguments) {
     struct proc *proc = curproc;
@@ -26,12 +26,11 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     /* This process should have an address space copied during fork */
     KASSERT(proc != NULL);
-    P(esem);
     char *_progname;
     size_t size;
     int i=0, count=0;
-    _progname = (char *) kmalloc(sizeof(char)*1024);
-    result = copyinstr(progname, _progname, 1024, &size);
+    _progname = (char *) kmalloc(sizeof(char)*PATH_MAX);
+    result = copyinstr(progname, _progname, PATH_MAX, &size);
     if(result) {
         kfree(_progname);
         return EFAULT;
@@ -40,8 +39,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         kfree(_progname);
         return EINVAL;
     }
-    
-    char *args = (char *) kmalloc(sizeof(char)*4096);
+    P(esem);
+    char *args = (char *) kmalloc(sizeof(char)*ARG_MAX);
     result = copyinstr((const_userptr_t)arguments, args, ARG_MAX, &size);
     if(result) {
         kfree(args);
@@ -49,7 +48,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         return EFAULT;
     }
     /* Copy the user arguments on to the kernel */
-
+   
     int offset = 0;
     while((char *) arguments[count] != NULL) {
         result = copyinstr((const_userptr_t) arguments[count], args+offset, ARG_MAX, &size);
@@ -96,6 +95,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     /* Open the file */
     result = vfs_open((char *)progname, O_RDONLY, 0, &v);
     if(result) {
+        kfree(args);
+        kfree(_progname);
         return result;
     }
 
@@ -119,6 +120,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     /* Load the executable. */
     result = load_elf(v, &entrypoint);
     if(result) {
+        kfree(args);
+        kfree(_progname);
         vfs_close(v);
         return result;
     }
@@ -129,6 +132,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     /* Define the user stack in the address space */
     result = as_define_stack(as, &stackptr);
     if(result) {
+        kfree(args);
+        kfree(_progname);
         return result;
     }
     // Copy the user arguments into the address space. First copy the arguments from user space into kernel space 
@@ -164,6 +169,9 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         stackptr -= len;
         result = copyout((const void *)arg, (userptr_t)stackptr, (size_t)len);
         if(result) {
+            kfree(args);
+            kfree(_progname);
+            kfree(stkargs);
             return result;
         }
         kfree(arg);
@@ -177,10 +185,15 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         stackptr = stackptr - sizeof(char *);
         //kprintf("copying arg %d at [%p]\n", i, *(stkargs+i));
         result = copyout((const void *)(stkargs+i), (userptr_t) stackptr, (sizeof(char *)));
-        if(result)
+        if(result) {
+            kfree(args);
+            kfree(_progname);
+            kfree(stkargs);
             return result;
+        }
         prevlen += 4;
     }
+    V(esem);
     /*vaddr_t tmp = stackptr+prevlen;
     result = copyin((const_userptr_t)stackptr, args, ARG_MAX);
     for(i=0; i<prevlen; i++) {
@@ -218,7 +231,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     }
     kfree(_progname);
     kfree(args);*/
-    V(esem);
 
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 

@@ -45,6 +45,8 @@ struct addrspace;
 struct thread;
 struct vnode;
 
+struct semaphore* esem;
+
 /*
  * Process structure.
  *
