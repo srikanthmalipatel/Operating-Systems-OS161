@@ -55,7 +55,7 @@
 struct proc *kproc;
 struct procManager *p_manager;
 static struct semaphore *esem = NULL;
-extern struct semaphore *execsem;
+static struct semaphore *execsem = NULL;
 /*
  * Create a proc structure.
  */

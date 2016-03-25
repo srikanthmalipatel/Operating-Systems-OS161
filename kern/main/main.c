@@ -65,6 +65,7 @@
 extern const int buildversion;
 extern const char buildconfig[];
 
+
 /*
  * Copyright message for the OS/161 base code.
  */

@@ -68,6 +68,8 @@ void
 vm_bootstrap(void)
 {
 	/* Do nothing. */
+
+
 }
 
 /*

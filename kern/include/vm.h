@@ -37,6 +37,25 @@
  */
 
 
+typedef enum state
+{
+	FREE,
+	FIXED,
+	DIRTY,
+	CLEAN
+
+}page_state;
+
+
+ struct coremap_entry
+ {
+	vaddr_t virtual_address;
+	page_state state;
+	int chunks;
+	struct addrspace* as;
+
+ };
+
 #include <machine/vm.h>
 
 /* Fault-type arguments to vm_fault() */
