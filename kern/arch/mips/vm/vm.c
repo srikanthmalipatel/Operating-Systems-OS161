@@ -163,7 +163,9 @@ getppages(unsigned long npages)
 
 			spinlock_acquire(cm_splock);
 		//	kprintf(" want %lu \n",npages);
-			for(uint32_t i = first_free_index; i < coremap_count - npages; i++)
+	
+		//!!!! setting it to i<= is causing a bigger leak. commiting for now, should test once the fork leaks are removed.
+			for(uint32_t i = first_free_index; i <= coremap_count - npages; i++)
 			{
 				if(coremap[i].state == FREE)
 				{
@@ -239,7 +241,7 @@ free_kpages(vaddr_t addr)
  	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 		
-	if(page_index < first_free_index || page_index > coremap_count)
+	if(page_index < first_free_index || page_index >= coremap_count)
 	{
 		return;
 	}
