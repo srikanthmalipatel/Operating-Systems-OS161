@@ -161,7 +161,7 @@ getppages(unsigned long npages)
 		{
 
 			spinlock_acquire(cm_splock);
-			kprintf(" want %lu \n",npages);
+		//	kprintf(" want %lu \n",npages);
 			for(uint32_t i = first_free_index; i < coremap_count - npages; i++)
 			{
 				if(coremap[i].state == FREE)
@@ -185,7 +185,7 @@ getppages(unsigned long npages)
 					{
 						addr = i*PAGE_SIZE;
 						
-						kprintf(" allocating index %d \n", i);
+				//		kprintf(" allocating index %d \n", i);
 						coremap[i].chunks = npages;
 
 						for(unsigned long k = i; k < i+npages; k++)
@@ -245,7 +245,7 @@ free_kpages(vaddr_t addr)
 		spinlock_acquire(cm_splock);
 		int chunks = coremap[page_index].chunks;
 			
-		kprintf(" freeing index : %d \n", page_index);
+//		kprintf(" freeing index : %d \n", page_index);
 		while(chunks > 0 && (page_index > first_free_index) && (page_index < coremap_count))
 		{
 			if(coremap[page_index].state != DIRTY)
@@ -272,7 +272,15 @@ coremap_used_bytes() {
 
 	/* dumbvm doesn't track page allocations. Return 0 so that khu works. */
 
-	return 0;
+	unsigned int count = 0;
+	spinlock_acquire(cm_splock);
+	for(uint32_t i = 0; i < coremap_count; i++)
+	{
+		if(coremap[i].state == FREE)
+			count++;	
+	}
+	spinlock_release(cm_splock);
+	return (coremap_count-count)*PAGE_SIZE;
 }
 
 void
