@@ -89,8 +89,9 @@ vm_bootstrap(void)
 
 	uint32_t coremap_size = (coremap_count) * (sizeof(struct coremap_entry));
 	uint32_t fixed_memory_size = first + coremap_size;
+	kprintf("**** fixed memory size : %d *****\n", fixed_memory_size);
 	fixed_memory_size = ROUNDUP(fixed_memory_size, PAGE_SIZE);
-	
+	kprintf("*** after up : %d **** \n", fixed_memory_size);	
 	free_memory_start_address = fixed_memory_size;
 
 	first_free_index = (free_memory_start_address / PAGE_SIZE); 
@@ -190,7 +191,9 @@ getppages(unsigned long npages)
 
 						for(unsigned long k = i; k < i+npages; k++)
 						{
-							coremap[k].state = DIRTY;
+							// !!! Dirty should be set only when called from page_alloc. basically means that we need to update the disk.
+							// When called from kmalloc, the page can never be swapped. so it should be FIXED/PINNED.
+							coremap[k].state = FIXED;
 					
 						}
 						break;
@@ -232,8 +235,8 @@ free_kpages(vaddr_t addr)
 	if(vm_initialized == false)
 		return;
 	
-	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
-	
+//	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
+ 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 		
 	if(page_index < first_free_index || page_index > coremap_count)
@@ -248,7 +251,7 @@ free_kpages(vaddr_t addr)
 //		kprintf(" freeing index : %d \n", page_index);
 		while(chunks > 0 && (page_index > first_free_index) && (page_index < coremap_count))
 		{
-			if(coremap[page_index].state != DIRTY)
+			if(coremap[page_index].state != FIXED)
 			{
 				kprintf("*** freeing a non dirty page **** \n");
 			
