@@ -249,7 +249,7 @@ free_kpages(vaddr_t addr)
 		int chunks = coremap[page_index].chunks;
 			
 //		kprintf(" freeing index : %d \n", page_index);
-		while(chunks > 0 && (page_index > first_free_index) && (page_index < coremap_count))
+		while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
 		{
 			if(coremap[page_index].state != FIXED)
 			{
