@@ -16,6 +16,7 @@ int sys_fork(struct trapframe* tf, int* retval) {
     int result;
 
     // copy the parents trapframe into kernel heap 
+    //kprintf("[sys_fork] creating trapframe\n");
     struct trapframe* childtf = (struct trapframe*) kmalloc(sizeof(struct trapframe));
     if(childtf == NULL) {
         return ENOMEM;
@@ -23,6 +24,7 @@ int sys_fork(struct trapframe* tf, int* retval) {
     *childtf = *tf;
     
     // create process
+    //kprintf("[sys_fork] creating process\n");
     newproc = proc_create("user process");
     if (newproc == NULL) {
         kfree(childtf);
@@ -47,6 +49,7 @@ int sys_fork(struct trapframe* tf, int* retval) {
 	spinlock_release(&curproc->p_lock);
     // copy the parent address space
     struct addrspace* c_addrspace;
+    //kprintf("[sys_fork] copying address space\n");
     result = as_copy(curproc->p_addrspace, &c_addrspace); 
     if (result) {
         kfree(childtf);
@@ -55,9 +58,11 @@ int sys_fork(struct trapframe* tf, int* retval) {
         return result;
     }
 
+    //kprintf("[sys_fork] copying filetable space\n");
     file_table_copy(curproc->t_file_table, newproc->t_file_table);
 
     // create a child thread and pass trapframe and address space
+    //kprintf("[sys_fork] creating new thread\n");
     result = thread_fork("user process",
             newproc,
             enter_forked_process,

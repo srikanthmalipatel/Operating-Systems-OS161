@@ -12,22 +12,14 @@
 
 int sys__exit(int exitcode) {
     struct proc* proc = curproc;
-    struct addrspace *as;
     KASSERT(proc != NULL);
-    (void) exitcode;
-    (void)as;
+    //kprintf("[sys_exit] Process[%d] Entering exit\n", curproc->pid);
     // first we need to exit the current thread. So that it moves to zombie state and will be cleaned up.
     //kprintf("[sys__exit] Exiting thread - %s\n", curthread->t_name);
-//    if(check_ppid_exists(proc)) {
-    file_table_cleanup();
-    proc->exited = true;
-    proc->exitcode = _MKWAIT_EXIT(exitcode);
-    V(proc->p_exitsem);
-    thread_exit();
-/*    } else {
-        dealloc_pid(proc);
-        proc_destroy(proc);
-    }
-*/
+        file_table_cleanup(curproc->t_file_table);
+        proc->exited = true;
+        proc->exitcode = _MKWAIT_EXIT(exitcode);
+        V(proc->p_exitsem);
+        thread_exit();
     return 0;
 }

@@ -68,6 +68,7 @@ int dealloc_pid(struct proc *userproc) {
     V(p_manager->p_sem);
     for(i=2; i<__MAX_PROC; i++) {
         if(i == userproc->pid) {
+            //kprintf("[dealloc_pid] found pid - %d\n", i);
             p_manager->p_table[i] = NULL;
             //lock_release(p_manager->p_lock);
             result = i;
@@ -94,11 +95,17 @@ struct proc* get_proc_pid(pid_t pid) {
 }
 
 bool check_ppid_exists(struct proc *userproc) {
-    bool exists = false, i;
+    //kprintf("[check_ppid] checking for ppid - %d \n", userproc->ppid);
+    bool exists = false;
+    int i;
+    if(userproc->ppid == -1)
+        return false;
     //lock_acquire(p_manager->p_lock);
     V(p_manager->p_sem);
     for(i=2; i<__MAX_PROC; i++) {
+        //kprintf("[check_ppid] %d\n", i);
         if(i == userproc->ppid) {
+            //kprintf("[check_ppid] found ppid \n");
             //lock_release(p_manager->p_lock);
             exists = true;
             break;

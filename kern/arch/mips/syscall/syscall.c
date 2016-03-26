@@ -280,6 +280,7 @@ enter_forked_process(void* ptr, unsigned long args)
     childtf.tf_v0 = 0;
     childtf.tf_a3 = 0;
     childtf.tf_epc += 4;
+    kfree(ptr);
     // load and activate the address space
     struct addrspace* as = (struct addrspace *) args;
     proc_setas(as);

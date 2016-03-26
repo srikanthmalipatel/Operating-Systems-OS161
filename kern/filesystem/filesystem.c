@@ -67,10 +67,8 @@ struct file_handle* file_handle_create()
 }
 
 // called when thread is abruptly destroyed with files still open,call close on  all the files this thread is currently holding.
-void file_table_cleanup()
+void file_table_cleanup(struct file_handle **ft)
 {
-	struct file_handle **ft = curproc->t_file_table;
-
 	if(ft == NULL)
 	        return;
     
@@ -78,7 +76,7 @@ void file_table_cleanup()
     {
         if(ft[i] != NULL)
         {
-            if(ft[i]->ref_count == 1)
+            if(ft[i]->ref_count == 1) 
                 sys_close(i);
             else
                 ft[i]->ref_count --;
