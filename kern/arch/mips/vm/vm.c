@@ -163,10 +163,8 @@ getppages(unsigned long npages)
 		{
 
 			spinlock_acquire(cm_splock);
-		//	kprintf(" want %lu \n",npages);
 	
 	//		kprintf(" getpages called for %lu \n",npages);
-		//!!!! setting it to i<= is causing a bigger leak. commiting for now, should test once the fork leaks are removed.
 			for(uint32_t i = first_free_index; i < coremap_count; i++)
 			{
 				if(coremap[i].state == FREE)
@@ -252,6 +250,9 @@ free_kpages(vaddr_t addr)
 		return;
 
 	spinlock_acquire(cm_splock);
+
+	//Should we allow the user to do this !!.. IMPORTANT - ASK TA.
+	//km2 and km5 are asking me to free memory that they have not called to be allocated. Is this fine ??
 	if(page_index < first_free_index)
 	{
 		coremap[page_index].state = FREE;
