@@ -67,10 +67,8 @@ static struct spinlock* cm_splock = NULL;
 
 static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
-paddr_t free_memory_end_address = 0;
 uint32_t coremap_count = 0;
 uint32_t first_free_index = 0;
-
 void
 vm_bootstrap(void)
 {
@@ -82,22 +80,22 @@ vm_bootstrap(void)
 
 //	first = first & PAGE_FRAME; // get it aligned
 //	last  = last & PAGE_FRAME;
+	kprintf("first free address : %d \n", first);
 
-	kprintf("**** max page index : %d ****\n", last/PAGE_SIZE);
 	coremap = (struct coremap_entry*)PADDR_TO_KVADDR(first);
 	coremap_count = last/PAGE_SIZE;
+	kprintf("coremap count : %d \n", coremap_count);
 
 	uint32_t coremap_size = (coremap_count) * (sizeof(struct coremap_entry));
+	kprintf("coremap size : %d \n", coremap_size);
 	uint32_t fixed_memory_size = first + coremap_size;
-	kprintf("**** fixed memory size : %d *****\n", fixed_memory_size);
 	fixed_memory_size = ROUNDUP(fixed_memory_size, PAGE_SIZE);
-	kprintf("*** after up : %d **** \n", fixed_memory_size);	
 	free_memory_start_address = fixed_memory_size;
+	kprintf("free memory start address : %d \n", free_memory_start_address);
 
 	first_free_index = (free_memory_start_address / PAGE_SIZE); 
-	free_memory_end_address = last;
+	kprintf("free memory start index : %d \n", first_free_index);
 
-	kprintf("**** total free pages : %d ***** ", (free_memory_end_address - free_memory_start_address)/PAGE_SIZE);
 
 	for(uint32_t i = 0; i < coremap_count; i++)
 	{
@@ -153,10 +151,13 @@ getppages(unsigned long npages)
 		spinlock_release(&stealmem_lock);
 	}
 	else
+	
 	{
+
 		//add new code here.
-		if(first_free_index + npages > coremap_count)
+		if(first_free_index + npages >= coremap_count)
 			addr = 0;
+
 
 		else
 		{
@@ -164,8 +165,9 @@ getppages(unsigned long npages)
 			spinlock_acquire(cm_splock);
 		//	kprintf(" want %lu \n",npages);
 	
+	//		kprintf(" getpages called for %lu \n",npages);
 		//!!!! setting it to i<= is causing a bigger leak. commiting for now, should test once the fork leaks are removed.
-			for(uint32_t i = first_free_index; i <= coremap_count - npages; i++)
+			for(uint32_t i = first_free_index; i < coremap_count; i++)
 			{
 				if(coremap[i].state == FREE)
 				{
@@ -226,6 +228,7 @@ alloc_kpages(unsigned npages)
 		return 0;
 	}
 
+//	kprintf("*** allocating vaddr : %d \n *****", PADDR_TO_KVADDR(pa));
 	return PADDR_TO_KVADDR(pa);
 	
 }
@@ -233,24 +236,36 @@ alloc_kpages(unsigned npages)
 void
 free_kpages(vaddr_t addr)
 {
-
 	if(vm_initialized == false)
 		return;
-	
-//	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
- 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
+//	kprintf("calling free on vaddr : %d \n", addr);	
+	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
+// 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 		
-	if(page_index < first_free_index || page_index >= coremap_count)
+/*	if(page_index < first_free_index || page_index >= coremap_count)
 	{
 		return;
+	}*/
+//	else
+	if(page_index > coremap_count)
+		return;
+
+	spinlock_acquire(cm_splock);
+	if(page_index < first_free_index)
+	{
+		coremap[page_index].state = FREE;
+		coremap[page_index].chunks = -1;
+	
 	}
 	else
 	{
-		spinlock_acquire(cm_splock);
+	//	spinlock_acquire(cm_splock);
 		int chunks = coremap[page_index].chunks;
 			
-//		kprintf(" freeing index : %d \n", page_index);
+	//	kprintf(" freeing index1 : %d \n", page_index);
+		if(coremap[page_index].state != FIXED)
+			kprintf("*** calling free on a non dirty page ****\n");
 		while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
 		{
 			if(coremap[page_index].state != FIXED)
@@ -258,6 +273,7 @@ free_kpages(vaddr_t addr)
 				kprintf("*** freeing a non dirty page **** \n");
 			
 			}
+	//		kprintf("freeing page : %d \n", page_index);
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
 
@@ -265,9 +281,10 @@ free_kpages(vaddr_t addr)
 			page_index++;
 			
 		}
-		spinlock_release(cm_splock);
+	//	spinlock_release(cm_splock);
 		
 	}
+	spinlock_release(cm_splock);
 
 }
 

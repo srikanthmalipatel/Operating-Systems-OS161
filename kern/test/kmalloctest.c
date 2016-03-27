@@ -81,7 +81,7 @@ kmallocthread(void *sm, unsigned long num)
 	int i;
 
 	for (i=0; i<NTRIES; i++) {
-		PROGRESS(i);
+	//	PROGRESS(i);
 		ptr = kmalloc(ITEMSIZE);
 		if (ptr==NULL) {
 			if (sem) {
