@@ -47,6 +47,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, int *retval) {
             return EFAULT;
     }
     dealloc_pid(waitproc);
+//    kprintf("********************** destroying process - %d \n", dealloc_pid(waitproc));
     proc_destroy(waitproc);
     *retval = pid;
     return 0;

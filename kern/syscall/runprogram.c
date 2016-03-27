@@ -105,13 +105,21 @@ runprogram(char *progname)
 
 	const char* name = "con:";
 
-	char con_name[5];
+	
+	char *con_name = kstrdup(name);
+	char *con_name2 = kstrdup(name);
+	char *con_name3 = kstrdup(name);
+	
+	
+	
+	/*char con_name[5];
 	char con_name2[5];
 	char con_name3[5];
 	
 	strcpy(con_name,name);
 	strcpy(con_name2,name);
 	strcpy(con_name3,name);
+    */
 
 	result = vfs_open(con_name, O_RDONLY, 0664, &v1);
 	if(result)

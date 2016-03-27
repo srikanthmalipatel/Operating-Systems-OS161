@@ -61,7 +61,8 @@ struct proc *
 proc_create(const char *name)
 {
 	struct proc *proc;
-
+    
+    //kprintf("[proc_create] allocating space for proc struct \n");
 	proc = kmalloc(sizeof(*proc));
 	if (proc == NULL) {
 		return NULL;
@@ -85,9 +86,10 @@ proc_create(const char *name)
     proc->ppid = -1;
  	
 
-    proc->p_self = NULL;
+    //proc->p_self = NULL;
     proc->p_exitsem = sem_create("exitsem", 0);
     if(proc->p_exitsem == NULL) {
+        spinlock_cleanup(&proc->p_lock);
         kfree(proc->p_name);
         kfree(proc);
         return NULL;
@@ -182,7 +184,6 @@ proc_destroy(struct proc *proc)
 	}
 
 	KASSERT(proc->p_numthreads == 0);
-	KASSERT(proc->p_self == NULL);
 	spinlock_cleanup(&proc->p_lock);
 
     sem_destroy(proc->p_exitsem);
@@ -261,7 +262,6 @@ proc_addthread(struct proc *proc, struct thread *t)
 	KASSERT(t->t_proc == NULL);
 
 	spinlock_acquire(&proc->p_lock);
-	proc->p_self = t;
 	proc->p_numthreads++;
 	spinlock_release(&proc->p_lock);
 
@@ -292,7 +292,7 @@ proc_remthread(struct thread *t)
 
 	spinlock_acquire(&proc->p_lock);
 	KASSERT(proc->p_numthreads > 0);
-	proc->p_self = NULL;
+	//proc->p_self = NULL;
 	proc->p_numthreads--;
 	spinlock_release(&proc->p_lock);
 
