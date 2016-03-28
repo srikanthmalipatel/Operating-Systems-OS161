@@ -255,6 +255,8 @@ free_kpages(vaddr_t addr)
 	//km2 and km5 are asking me to free memory that they have not called to be allocated. Is this fine ??
 	if(page_index < first_free_index)
 	{
+
+		kprintf("*** freeing a page which was allocated with ram_stealmem() *****");
 		coremap[page_index].state = FREE;
 		coremap[page_index].chunks = -1;
 	

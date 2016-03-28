@@ -59,6 +59,16 @@ struct addrspace {
         paddr_t as_stackpbase;
 #else
         /* Put stuff here for your VM system */
+       /*
+        * Anirudh : use a linked list of region structures
+        * Each region structure contains info about that region
+        * such as start virtual address,region size, and permission info
+        * these should be initialized when as_define_region is called.
+
+        * The address space should also have a page table linked list
+        * each entry in the list contains the vaddr,paddr and permissions corresponding to a page
+        * page status - unmapped/mapped/swapped.
+        */
 #endif
 };
 
