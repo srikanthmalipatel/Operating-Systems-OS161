@@ -58,13 +58,15 @@
 /* under dumbvm, always have 72k of user stack */
 /* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
 #define DUMBVM_STACKPAGES    18
+#define VM_STACKPAGES        200
+#define VM_STACKBOUND        USERSTACK - VM_STACKPAGES*PAGE_SIZE     
 static bool  vm_initialized = false;
 /*
  * Wrap ram_stealmem in a spinlock.
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock* cm_splock = NULL;
-
+struct spinlock* tlb_splock = NULL;
 static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
 uint32_t coremap_count = 0;
@@ -111,6 +113,7 @@ vm_bootstrap(void)
 	}
 
 	vm_initialized = true;
+	spinlock_init(tlb_splock);
 }
 
 /*
@@ -195,6 +198,8 @@ getppages(unsigned long npages)
 						{
 							// !!! Dirty should be set only when called from page_alloc. basically means that we need to update the disk.
 							// When called from kmalloc, the page can never be swapped. so it should be FIXED/PINNED.
+
+							// No. kernel threads can call kmalloc, set owner as current process. So can be dirty, just need to check if it is kernel to set FIXED.
 							coremap[k].state = FIXED;
 					
 						}
@@ -325,9 +330,9 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-	(void)faulttype;
-	(void)faultaddress;
-	return 0;
+	
+	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
+		return EINVAL;
 
 	if(curproc == NULL)
 		return EFAULT;
@@ -338,12 +343,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	
 
+	spinlock_acquire(tlb_splock);
 	//check if fault_address is valid.
 	faultaddress &= PAGE_FRAME;
 	struct list_node* region = as->as_region_list;
 
 	bool is_valid = false;
 	int can_read = 0, can_write = 0, can_execute = 0;
+	bool is_stack_page = false, is_heap_page = false;
 
 	while(region != NULL)
 	{
@@ -366,13 +373,142 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(is_valid == false)
 	{
+		// check heap. heap_start is setup in as_define_region, heap_end is set in sbrk.
+		// each process contains one thread only, so we dont have to synchronize here.
+		if(faultaddress >= as->as_heap_start && faultaddress < as->as_heap_end)
+		{	
+			is_valid = true;
+			is_heap_page = true;
+			can_read = 1;
+			can_write = 1;
+			can_execute = 1; // really though?
+		}
+	}
+
+	if(is_valid == false)
+	{
+		// check stack.  
+		if(faultaddress > VM_STACKBOUND && faultaddress <= USERSTACK)
+		{	
+			is_valid = true;
+			is_stack_page = true;
+			can_read = 1;
+			can_write = 1;
+			can_execute = 1;
+		}
+	}
+
+	if(is_valid == false)
+	{
 		// kill the process?
-		return EFAULT;
+		spinlock_release(tlb_splock);
+		return EFAULT; // this is what dumbvm returns.
 	
 	}
-	(void)can_read;
-	(void)can_write;
+
+	//if it reaches here, then the page is valid
+	//check if permissions are valid
+	if((faulttype == VM_FAULT_WRITE && can_write == 0) ||
+		(faulttype == VM_FAULT_READONLY && can_write == 0) ||
+		(faulttype == VM_FAULT_READ && can_read == 0))
+	{
+		//invalid operation on this page. kill the process?
+		return EFAULT;
+	}
+
+	// can read though. so simply fix the tlb entry. what will the hardware do now?
+	if(faulttype == VM_FAULT_READONLY && can_write == 1)
+	{
+		// fix the dirty bit of the tlb entry.
+		uint32_t ehi, elo;	
+		int spl = splhigh();
+		int i;
+
+		for (i=0; i<NUM_TLB; i++) 
+		{
+			tlb_read(&ehi, &elo, i);
+			if (elo & TLBLO_VALID) 
+			{
+				if(ehi == faultaddress)
+				{
+					elo = elo | TLBLO_DIRTY; // set the dirty bit.
+					tlb_write(ehi, elo, i);
+					splx(spl);
+					spinlock_release(tlb_splock);
+					return 0;
+				}
+			}
+		}
+		//this should not get hit at all.
+		KASSERT(i >= NUM_TLB);
+	}
+
+	
+	// check if it is a page fault.
+	bool in_page_table = false;
+	paddr_t paddr = 0;
+	struct list_node* temp = as->as_page_list;
+
+	while(temp != NULL)
+	{
+		struct page_table_entry* page = (struct page_table_entry*)temp->node;
+		KASSERT(page != NULL);
+
+		if(page->vaddr == faultaddress)
+		{
+			in_page_table = true;
+			paddr = page->paddr;
+			// check if anything went horribly wrong.
+			KASSERT(can_read == page->can_read);
+			KASSERT(can_write == page->can_write);
+			KASSERT(can_execute == page->can_execute);
+			break;
+		}
+		temp = temp->next;
+	
+	}
+
+
+	if(in_page_table == true)
+	{
+		//simple case. just update the tlb entry.
+		// I already have the tlb lock.
+
+		KASSERT(paddr != 0);
+
+		uint32_t elo,ehi;
+		int	spl = splhigh();
+
+		for (int i=0; i < NUM_TLB; i++) 
+		{
+			tlb_read(&ehi, &elo, i);
+			if (elo & TLBLO_VALID) 
+			{
+				continue;
+			}
+			
+			ehi = faultaddress;
+			elo = paddr | TLBLO_VALID;
+		
+			if(can_write == 1)
+				elo = elo | TLBLO_DIRTY;
+
+			tlb_write(ehi, elo, i);
+			splx(spl);
+			spinlock_release(tlb_splock);
+			return 0;
+		}
+
+		//if i reach here, that means the tlb is full. what do i do now?.
+//		spinlock_release(tlb_splock);
+//		return 0;
+	}
+
+
+	(void)is_stack_page;
+	(void)is_heap_page;
 	(void)can_execute;
+	(void)in_page_table;
 
 
 
@@ -402,11 +538,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 		
 		default:
-		return EINVAL;
-	
+		{
+			spinlock_release(tlb_splock);
+			return EINVAL;
+		}
 	
 	}
 
+	spinlock_release(tlb_splock);
+	return 0;
+	
 
 
 /*

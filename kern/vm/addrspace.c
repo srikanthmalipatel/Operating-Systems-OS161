@@ -262,7 +262,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	if(vaddr + (npages*PAGE_SIZE) > as->as_heap_start)
 	{
 		as->as_heap_start = vaddr + (npages*PAGE_SIZE);
-		as->as_heap_start = ROUNDUP(as->as_heap_start, PAGE_SIZE);
+		as->as_heap_start = ROUNDUP(as->as_heap_start, PAGE_SIZE); // Alignment
+		as->as_heap_end = as->as_heap_start; // just initializing, subsequent calls to sbrk will alter this value.
 	}
 
     int ret = add_node(&(as->as_region_list), temp);
