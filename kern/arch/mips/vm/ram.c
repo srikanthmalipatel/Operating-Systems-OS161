@@ -97,6 +97,7 @@ ram_stealmem(unsigned long npages)
 	size_t size;
 	paddr_t paddr;
 
+	kprintf("**** calling ram stealmem **** \n");
 	size = npages * PAGE_SIZE;
 
 	if (firstpaddr + size > lastpaddr) {

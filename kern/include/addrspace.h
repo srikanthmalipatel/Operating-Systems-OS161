@@ -36,6 +36,7 @@
 
 
 #include <vm.h>
+
 #include "opt-dumbvm.h"
 
 struct vnode;
@@ -69,7 +70,34 @@ struct addrspace {
         * each entry in the list contains the vaddr,paddr and permissions corresponding to a page
         * page status - unmapped/mapped/swapped.
         */
+        struct list_node* as_region_list;
+        struct list_node* as_page_list;
+        vaddr_t as_stack_end;
+        vaddr_t as_heap_start;
+        vaddr_t as_heap_end;
+        
 #endif
+};
+
+struct as_region
+{
+	// should really use bitfields on all structs.
+	vaddr_t region_base;
+	size_t region_npages;
+	int can_read : 1;
+	int can_write : 1;
+	int configured_can_write : 1; // the one which load_elf provides. This will be used in as_prepare_load and as_complete_load
+	int can_execute : 1;
+};
+
+struct page_table_entry
+{
+	vaddr_t vaddr;
+	paddr_t paddr;
+	int can_read : 1;
+	int can_write : 1;
+	int can_execute : 1;
+
 };
 
 /*

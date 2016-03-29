@@ -36,7 +36,7 @@
  * You'll probably want to add stuff here.
  */
 
-
+#include<linked_list.h>
 typedef enum state
 {
 	FREE,

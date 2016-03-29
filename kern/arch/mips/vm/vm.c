@@ -63,7 +63,7 @@ static bool  vm_initialized = false;
  * Wrap ram_stealmem in a spinlock.
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
-static struct spinlock* cm_splock = NULL;
+struct spinlock* cm_splock = NULL;
 
 static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
