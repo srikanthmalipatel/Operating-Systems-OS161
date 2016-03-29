@@ -42,6 +42,13 @@
  */
 
 extern struct spinlock* cm_splock;
+
+void
+as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+}
+
 struct addrspace *
 as_create(void)
 {

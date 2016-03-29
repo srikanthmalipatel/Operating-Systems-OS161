@@ -265,7 +265,8 @@ free_kpages(vaddr_t addr)
 	{
 	//	spinlock_acquire(cm_splock);
 		int chunks = coremap[page_index].chunks;
-			
+		
+		
 	//	kprintf(" freeing index1 : %d \n", page_index);
 		if(coremap[page_index].state != FIXED)
 			kprintf("*** calling free on a non dirty page ****\n");
@@ -279,7 +280,7 @@ free_kpages(vaddr_t addr)
 	//		kprintf("freeing page : %d \n", page_index);
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
-
+			as_zero_region(page_index*PAGE_SIZE, 1);
 			chunks--;
 			page_index++;
 			
@@ -327,6 +328,87 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	(void)faulttype;
 	(void)faultaddress;
 	return 0;
+
+	if(curproc == NULL)
+		return EFAULT;
+	
+	struct addrspace *as = NULL;
+	as = proc_getas();
+	if(as == NULL)
+		return EFAULT;
+	
+
+	//check if fault_address is valid.
+	faultaddress &= PAGE_FRAME;
+	struct list_node* region = as->as_region_list;
+
+	bool is_valid = false;
+	int can_read = 0, can_write = 0, can_execute = 0;
+
+	while(region != NULL)
+	{
+		struct as_region* temp = (struct as_region*)region->node;
+		vaddr_t vaddr = temp->region_base;
+		size_t npages = temp->region_npages;
+	
+	 	// currently checking in regions provided by the ELF, should check in stack and heap also. HOW??
+		if(faultaddress >= vaddr  && faultaddress < vaddr + PAGE_SIZE*npages)
+		{
+			is_valid = true;
+			can_read = temp->can_read;
+			can_write = temp->can_write;
+			can_execute = temp->can_execute;
+			
+			break;
+		}
+		region = region->next;
+	}
+
+	if(is_valid == false)
+	{
+		// kill the process?
+		return EFAULT;
+	
+	}
+	(void)can_read;
+	(void)can_write;
+	(void)can_execute;
+
+
+
+	switch(faulttype)
+	{
+		case VM_FAULT_READONLY:
+		{
+		
+		
+		
+			break;
+		}
+
+		case VM_FAULT_READ:
+		{
+		
+		
+		
+			break;
+		}
+		case VM_FAULT_WRITE:
+		{
+		
+		
+		
+			break;
+		}
+		
+		default:
+		return EINVAL;
+	
+	
+	}
+
+
+
 /*
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
 	paddr_t paddr;
@@ -426,4 +508,19 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return EFAULT;
 	*/
 }
+
+/*
+paddr_t get_physical_page_address(struct addrspace*as, vaddr_t vaddr)
+{
+	paddr_t paddr = 0;
+	if(as == NULL)
+		return 0;
+	
+	struct list_node* page_table = as->as_page_list;
+
+
+
+
+
+}*/
 
