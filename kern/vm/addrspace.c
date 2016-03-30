@@ -253,10 +253,20 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	struct as_region* temp = (struct as_region*)kmalloc(sizeof(struct as_region));
 	temp->region_base = vaddr;
 	temp->region_npages = npages;
-	temp->can_read = readable;
-	temp->can_write = writeable;
-	temp->configured_can_write = writeable; // store this. see as_prepare_load and as_complete_load to see why this is needed
-	temp->can_execute = executable;
+	if(readable == 4)
+		temp->can_read = 1;
+	else
+		temp->can_read = 0;
+	
+	if(writeable == 2)
+		temp->can_write = 1;
+	else
+		temp->can_write = 0;
+	if(executable == 1)
+		temp->can_execute = 1;
+	else
+		temp->can_execute = 0;
+	temp->configured_can_write = temp->can_write; // store this. see as_prepare_load and as_complete_load to see why this is needed
 
 	//setting heap address
 	if(vaddr + (npages*PAGE_SIZE) > as->as_heap_start)

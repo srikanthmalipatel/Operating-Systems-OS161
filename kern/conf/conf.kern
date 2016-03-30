@@ -389,6 +389,7 @@ file	  syscall/sys_getpid.c
 file	  syscall/sys_exit.c
 file	  syscall/sys_wait.c
 file	  syscall/sys_execv.c
+file 	  syscall/sys_sbrk.c
 #
 # Startup and initialization
 #

@@ -113,6 +113,7 @@ vm_bootstrap(void)
 	}
 
 	vm_initialized = true;
+	tlb_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(tlb_splock);
 }
 
@@ -339,58 +340,8 @@ free_kpages(vaddr_t addr)
 			page_index++;
 			
 		}
-	//	spinlock_release(cm_splock);
 		
 	}
-
-	// ONLY DO THIS IF THIS IS NOT THE KERNEL.
-	// check proc name or proc id .
-
-	//remove this page from page list;
-/*	struct addrspace* as = NULL;
-	as = proc_getas();
-	KASSERT(as != NULL);
-
-	struct list_node* temp = as->as_page_list;
-	KASSERT(temp!= NULL);
-
-	struct list_node* prev = NULL;
-	struct page_table_entry* p = (struct page_table_entry*)temp->node;
-	KASSERT(p != NULL);
-	if(p->vaddr == addr)
-	{
-		kfree(p);
-		as->as_page_list = temp->next;	
-		kfree(temp);
-	
-	
-	}
-	else
-	{
-		while(temp != NULL)
-		{
-			struct page_table_entry* p = (struct page_table_entry*)temp->node;
-			KASSERT(p != NULL);
-			if(p->vaddr == addr)
-			{
-				KASSERT(prev != NULL);
-				prev->next = temp->next;
-				kfree(p);
-				kfree(temp);
-				break;
-			
-			}
-			else
-			{
-				prev = temp;
-				temp = temp->next;
-			}
-	
-	
-		}
-	}
-	*/
-
 	spinlock_release(cm_splock);
 
 }
