@@ -289,12 +289,20 @@ free_kpages(vaddr_t addr)
 
 			// free this page from the processes page table, do this only if cur proc is not kernel
 			// there's probably a better way to do this.
-			if(strcmp(curproc->p_name,"[kernel]") != 0)
+			if(curproc->pid != 1)
+		//	if(strcmp(curproc->p_name,"[kernel]") != 0 || curproc->pid != 1)
 			{
 				struct addrspace* as = NULL;
 				as = proc_getas();
-				KASSERT(as != NULL);
-	
+		//		KASSERT(as != NULL);
+		//*********** check this again ***********//
+				if(as == NULL)
+				{
+					page_index++;
+					chunks--;
+					continue;
+				}
+					
 				struct list_node* temp = as->as_page_list;
 				KASSERT(temp!= NULL);
 
@@ -359,6 +367,23 @@ coremap_used_bytes() {
 	}
 	spinlock_release(cm_splock);
 	return (coremap_count-count)*PAGE_SIZE;
+}
+
+unsigned int coremap_free_bytes()
+{
+   unsigned int free = 0;
+   
+   spinlock_acquire(cm_splock);
+   for(uint32_t i = 0; i < coremap_count; i++)
+   {
+	  if(coremap[i].state == FREE)
+		  free++;	
+   }
+   spinlock_release(cm_splock);
+   return free*PAGE_SIZE;
+  
+
+
 }
 
 void

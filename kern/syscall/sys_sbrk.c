@@ -18,6 +18,14 @@ int sys_sbrk(intptr_t amount, int* retval)
 	
 	}
 
+	unsigned int p  = amount;
+	// should probably change this when swapping is implemented.
+	if(amount > 0 && p > coremap_free_bytes())
+	{
+		*retval = -1;
+		return ENOMEM;
+	}
+
 	// unaligned , return inval.
 	if(amount > 0 && amount != ROUNDUP(amount,4))
 	{
@@ -27,7 +35,9 @@ int sys_sbrk(intptr_t amount, int* retval)
 	}
 
 	// asking for too much
-	if(amount > 0 && heap_end - VM_STACKBOUND + amount > 0) // essentially checking if heap_end + amount > VM_STACKBOUND, doing it like this to avoid overflows.
+	size_t request = heap_end + amount;
+	size_t bound = VM_STACKBOUND;
+	if(amount > 0 && request > bound) // essentially checking if heap_end + amount > VM_STACKBOUND, doing it like this to avoid overflows.
 	{
 		*retval = -1;
 		return ENOMEM;

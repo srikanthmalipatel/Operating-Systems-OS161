@@ -166,11 +166,12 @@ as_destroy(struct addrspace *as)
 	while(cur != NULL)
 	{
 		next = cur->next;
-		struct page_table_entry* p = cur->node;
-		kfree((void *)PADDR_TO_KVADDR(p->paddr)); // is this safe?.Using this because you cannot kfree a user virtual address.
+		struct page_table_entry* p = (struct page_table_entry*)cur->node;
+		paddr_t addr = PADDR_TO_KVADDR(p->paddr);
+		kfree((void *)addr); // is this safe?.Using this because you cannot kfree a user virtual address.
 											 	 // so we pass the KV address corresponding to the physical address.
-		kfree(p);
-		kfree(cur);
+	//	kfree(p);
+	//	kfree(cur);
 		cur = next;
 	
 	}

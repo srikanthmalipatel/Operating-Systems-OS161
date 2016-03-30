@@ -42,7 +42,7 @@
 struct vnode;
 
 #define VM_STACKPAGES        200
-#define VM_STACKBOUND        USERSTACK - VM_STACKPAGES*PAGE_SIZE     
+#define VM_STACKBOUND        (USERSTACK - VM_STACKPAGES*PAGE_SIZE)     
 
 /*
  * Address space - data structure associated with the virtual memory
