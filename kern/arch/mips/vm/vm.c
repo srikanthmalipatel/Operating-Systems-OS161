@@ -242,8 +242,8 @@ free_kpages(vaddr_t addr)
 	if(vm_initialized == false)
 		return;
 //	kprintf("calling free on vaddr : %d \n", addr);	
-	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
-// 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
+//	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
+ 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 		
 /*	if(page_index < first_free_index || page_index >= coremap_count)
@@ -293,6 +293,54 @@ free_kpages(vaddr_t addr)
 	//	spinlock_release(cm_splock);
 		
 	}
+
+	// ONLY DO THIS IF THIS IS NOT THE KERNEL.
+	// check proc name or proc id .
+
+	//remove this page from page list;
+	struct addrspace* as = NULL;
+	as = proc_getas();
+	KASSERT(as != NULL);
+
+	struct list_node* temp = as->as_page_list;
+	KASSERT(temp!= NULL);
+
+	struct list_node* prev = NULL;
+	struct page_table_entry* p = (struct page_table_entry*)temp->node;
+	KASSERT(p != NULL);
+	if(p->vaddr == addr)
+	{
+		kfree(p);
+		as->as_page_list = temp->next;	
+		kfree(temp);
+	
+	
+	}
+	else
+	{
+		while(temp != NULL)
+		{
+			struct page_table_entry* p = (struct page_table_entry*)temp->node;
+			KASSERT(p != NULL);
+			if(p->vaddr == addr)
+			{
+				KASSERT(prev != NULL);
+				prev->next = temp->next;
+				kfree(p);
+				kfree(temp);
+				break;
+			
+			}
+			else
+			{
+				prev = temp;
+				temp = temp->next;
+			}
+	
+	
+		}
+	}
+
 	spinlock_release(cm_splock);
 
 }
@@ -500,18 +548,86 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 
 		//if i reach here, that means the tlb is full. what do i do now?.
-//		spinlock_release(tlb_splock);
-//		return 0;
+		// tlb  full. use random.
+		ehi = faultaddress;
+		elo = paddr | TLBLO_VALID;
+
+		if(can_write == 1)
+			elo = elo | TLBLO_DIRTY;
+
+		tlb_random(ehi, elo);
+		splx(spl);
+		spinlock_release(tlb_splock);
+		return 0;
 	}
 
+	// Now to the fun part, TLB_FAULT and PAGE_FAULT
+    // create memory for this page	
 
+	void* v= kmalloc(PAGE_SIZE);
+	if(v == NULL)	
+		return ENOMEM;
+	
+	paddr = KVADDR_TO_PADDR((vaddr_t)v);
+
+	// create a page table entry
+	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
+	p->vaddr = faultaddress;
+	p->paddr = paddr;
+	p->can_read = can_read;
+	p->can_write = can_write;
+	p->can_execute = can_execute;
+
+	// add this to the page table
+	int i = add_node(&as->as_page_list, p);
+	if(i == -1)
+		return ENOMEM;
+	
+	// now add this to the TLB.
+	uint32_t elo,ehi;
+	int spl = splhigh();
+
+ // REMOVE PAGE TABLE ENTRY ON CALLING KFREE.
+
+	for (int i=0; i < NUM_TLB; i++) 
+	{
+		tlb_read(&ehi, &elo, i);
+		if (elo & TLBLO_VALID) 
+		{
+			continue;
+		}
+			
+		ehi = faultaddress;
+		elo = paddr | TLBLO_VALID;
+		
+		if(can_write == 1)
+			elo = elo | TLBLO_DIRTY;
+
+		tlb_write(ehi, elo, i);
+		splx(spl);
+		spinlock_release(tlb_splock);
+		return 0;
+	}
+
+	//if i reach here, that means the tlb is full. what do i do now?.
+	// tlb  full. use random.
+	ehi = faultaddress;
+	elo = paddr | TLBLO_VALID;
+
+	if(can_write == 1)
+		elo = elo | TLBLO_DIRTY;
+
+	tlb_random(ehi, elo);
+	splx(spl);
+	spinlock_release(tlb_splock);
 	(void)is_stack_page;
 	(void)is_heap_page;
 	(void)can_execute;
-	(void)in_page_table;
+	return 0;
 
 
 
+/*
 	switch(faulttype)
 	{
 		case VM_FAULT_READONLY:
@@ -548,7 +664,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	spinlock_release(tlb_splock);
 	return 0;
 	
-
+*/
 
 /*
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
