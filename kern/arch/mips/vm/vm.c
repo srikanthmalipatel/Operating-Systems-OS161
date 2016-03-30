@@ -286,6 +286,55 @@ free_kpages(vaddr_t addr)
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
 			as_zero_region(page_index*PAGE_SIZE, 1);
+
+
+			// free this page from the processes page table, do this only if cur proc is not kernel
+			// there's probably a better way to do this.
+			if(strcmp(curproc->p_name,"[kernel]") != 0)
+			{
+				struct addrspace* as = NULL;
+				as = proc_getas();
+				KASSERT(as != NULL);
+	
+				struct list_node* temp = as->as_page_list;
+				KASSERT(temp!= NULL);
+
+				struct list_node* prev = NULL;
+				struct page_table_entry* p = (struct page_table_entry*)temp->node;
+				KASSERT(p != NULL);
+				if(p->paddr == page_index*PAGE_SIZE)
+				{
+					kfree(p);
+					as->as_page_list = temp->next;	
+					kfree(temp);
+	
+				}
+				else
+				{
+					while(temp != NULL)
+					{
+						struct page_table_entry* p = (struct page_table_entry*)temp->node;
+						KASSERT(p != NULL);
+						if(p->paddr == page_index*PAGE_SIZE)
+							{
+							KASSERT(prev != NULL);
+							prev->next = temp->next;
+							kfree(p);
+							kfree(temp);
+							break;
+				
+						}
+						else
+						{
+							prev = temp;
+							temp = temp->next;
+						}
+	
+	
+					}
+				}
+			}
+
 			chunks--;
 			page_index++;
 			
@@ -298,7 +347,7 @@ free_kpages(vaddr_t addr)
 	// check proc name or proc id .
 
 	//remove this page from page list;
-	struct addrspace* as = NULL;
+/*	struct addrspace* as = NULL;
 	as = proc_getas();
 	KASSERT(as != NULL);
 
@@ -340,6 +389,7 @@ free_kpages(vaddr_t addr)
 	
 		}
 	}
+	*/
 
 	spinlock_release(cm_splock);
 
