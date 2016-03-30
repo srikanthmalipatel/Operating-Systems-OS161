@@ -19,6 +19,6 @@
 #include <kern/fcntl.h>
 #include <kern/sys_execv.h>
 
-int sys_sbrk(size_t amount, int *retval);
+int sys_sbrk(intptr_t amount, int *retval);
 
 #endif /* !SYS_SBRK_H */

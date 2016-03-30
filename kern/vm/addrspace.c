@@ -106,7 +106,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 
 	temp1 = old->as_page_list;
-	spinlock_acquire(cm_splock);
+//	spinlock_acquire(cm_splock);
 	while(temp1 != NULL)
 	{
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
@@ -139,13 +139,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = add_node(&newas->as_page_list,p_new);
 		if(ret == -1)
 		{
-			spinlock_release(cm_splock);
+	//		spinlock_release(cm_splock);
 			return ENOMEM;
 		}
 		temp1 = temp1->next;
 	
 	}
-	spinlock_release(cm_splock);
+//	spinlock_release(cm_splock);
 
 	(void)old;
 

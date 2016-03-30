@@ -41,6 +41,8 @@
 
 struct vnode;
 
+#define VM_STACKPAGES        200
+#define VM_STACKBOUND        USERSTACK - VM_STACKPAGES*PAGE_SIZE     
 
 /*
  * Address space - data structure associated with the virtual memory
@@ -84,19 +86,19 @@ struct as_region
 	// should really use bitfields on all structs.
 	vaddr_t region_base;
 	size_t region_npages;
-	int can_read : 1;
-	int can_write : 1;
-	int configured_can_write : 1; // the one which load_elf provides. This will be used in as_prepare_load and as_complete_load
-	int can_execute : 1;
+	int can_read ;
+	int can_write ;
+	int configured_can_write ; // the one which load_elf provides. This will be used in as_prepare_load and as_complete_load
+	int can_execute ;
 };
 
 struct page_table_entry
 {
 	vaddr_t vaddr;
 	paddr_t paddr;
-	int can_read : 1;
-	int can_write : 1;
-	int can_execute : 1;
+	int can_read ;
+	int can_write ;
+	int can_execute ;
 
 };
 

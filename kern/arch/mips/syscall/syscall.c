@@ -228,7 +228,7 @@ syscall(struct trapframe *tf)
             err = sys_execv((userptr_t)tf->tf_a0, (userptr_t *)tf->tf_a1);
             break;
         case SYS_sbrk:
-        	err = sys_sbrk(tf->tf_a0, &retval);
+        	err = sys_sbrk((intptr_t)tf->tf_a0, &retval);
         	break;
 	    default:
 		    kprintf("Unknown syscall %d\n", callno);

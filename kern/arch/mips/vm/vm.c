@@ -58,8 +58,6 @@
 /* under dumbvm, always have 72k of user stack */
 /* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
 #define DUMBVM_STACKPAGES    18
-#define VM_STACKPAGES        200
-#define VM_STACKBOUND        USERSTACK - VM_STACKPAGES*PAGE_SIZE     
 static bool  vm_initialized = false;
 /*
  * Wrap ram_stealmem in a spinlock.
@@ -392,7 +390,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	
 
-	spinlock_acquire(tlb_splock);
+//	spinlock_acquire(tlb_splock);
 	//check if fault_address is valid.
 	faultaddress &= PAGE_FRAME;
 	struct list_node* region = as->as_region_list;
@@ -450,7 +448,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	if(is_valid == false)
 	{
 		// kill the process?
-		spinlock_release(tlb_splock);
+//		spinlock_release(tlb_splock);
 		return EFAULT; // this is what dumbvm returns.
 	
 	}
@@ -473,6 +471,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		int spl = splhigh();
 		int i;
 
+		spinlock_acquire(tlb_splock);
 		for (i=0; i<NUM_TLB; i++) 
 		{
 			tlb_read(&ehi, &elo, i);
@@ -509,7 +508,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			paddr = page->paddr;
 			// check if anything went horribly wrong.
 			KASSERT(can_read == page->can_read);
-			KASSERT(can_write == page->can_write);
+		//	KASSERT(can_write == page->can_write);
 			KASSERT(can_execute == page->can_execute);
 			break;
 		}
@@ -528,6 +527,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		uint32_t elo,ehi;
 		int	spl = splhigh();
 
+		spinlock_acquire(tlb_splock);
 		for (int i=0; i < NUM_TLB; i++) 
 		{
 			tlb_read(&ehi, &elo, i);
@@ -588,8 +588,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t elo,ehi;
 	int spl = splhigh();
 
- // REMOVE PAGE TABLE ENTRY ON CALLING KFREE.
 
+	spinlock_acquire(tlb_splock);
 	for (int i=0; i < NUM_TLB; i++) 
 	{
 		tlb_read(&ehi, &elo, i);
