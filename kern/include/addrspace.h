@@ -96,9 +96,9 @@ struct page_table_entry
 {
 	vaddr_t vaddr;
 	paddr_t paddr;
-	int can_read ;
-	int can_write ;
-	int can_execute ;
+//	int can_read ;
+//	int can_write ;
+//	int can_execute ;
 
 };
 

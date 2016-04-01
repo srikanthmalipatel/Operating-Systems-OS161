@@ -121,9 +121,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		// But all physical memory allocations should happen at vm_fault.
 
 //		p_new->paddr = p_old->paddr; // this is wrong, they do not map to the same physical address..
-		p_new->can_read = p_old->can_read;
-		p_new->can_write = p_old->can_write;
-		p_new->can_execute = p_old->can_execute;
+//		p_new->can_read = p_old->can_read;
+//		p_new->can_write = p_old->can_write;
+//		p_new->can_execute = p_old->can_execute;
 
 		void *page = kmalloc(PAGE_SIZE); // but this returns kernel virtual address. but that's ok, cause we are mapping it to a user space virtual address.
 										// owner gets set as the kernel though. This probably is trouble when swapping. Change the coremap value ??
@@ -175,9 +175,11 @@ as_destroy(struct addrspace *as)
 		cur = next;
 	
 	}
+	as->as_page_list = NULL;
 
 	//this is straight forward though.
 	delete_list(&(as->as_region_list));
+	as->as_region_list = NULL;
 	kfree(as);
 }
 

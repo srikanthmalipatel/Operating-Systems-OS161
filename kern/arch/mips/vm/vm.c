@@ -289,21 +289,31 @@ free_kpages(vaddr_t addr)
 
 			// free this page from the processes page table, do this only if cur proc is not kernel
 			// there's probably a better way to do this.
+
+
+			/// **** ALSO CLEAR THE TLB ENTRY FOR THIS PAGE ******
 			if(curproc->pid != 1)
 		//	if(strcmp(curproc->p_name,"[kernel]") != 0 || curproc->pid != 1)
 			{
 				struct addrspace* as = NULL;
 				as = proc_getas();
-		//		KASSERT(as != NULL);
+				KASSERT(as != NULL);
 		//*********** check this again ***********//
-				if(as == NULL)
+			/*	if(as == NULL)
 				{
 					page_index++;
 					chunks--;
 					continue;
 				}
+				*/
 					
 				struct list_node* temp = as->as_page_list;
+		/*		if(temp == NULL)
+				{
+					page_index++;
+					chunks--;
+					continue;
+				}*/
 				KASSERT(temp!= NULL);
 
 				struct list_node* prev = NULL;
@@ -340,6 +350,30 @@ free_kpages(vaddr_t addr)
 	
 					}
 				}
+
+				spinlock_acquire(tlb_splock);
+				int i, spl;
+				spl = splhigh();
+				uint32_t elo,ehi;
+				for (i=0; i<NUM_TLB; i++) 
+				{
+					tlb_read(&ehi, &elo, i);
+					if (elo & TLBLO_VALID) 
+					{
+						elo &= PAGE_SIZE; // removing the other meta bits.
+						if(elo == page_index* PAGE_SIZE)
+						{
+							tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+							break;	
+						}
+					}
+				}
+
+				splx(spl);
+
+				spinlock_release(tlb_splock);
+
+
 			}
 
 			chunks--;
@@ -381,9 +415,6 @@ unsigned int coremap_free_bytes()
    }
    spinlock_release(cm_splock);
    return free*PAGE_SIZE;
-  
-
-
 }
 
 void
@@ -402,7 +433,12 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-	
+/*	if(faultaddress == USERSTACK - PAGE_SIZE)
+	{
+	    faultaddress &= PAGE_FRAME;
+		faultaddress &= PAGE_FRAME;	
+	}
+	*/
 	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
 		return EINVAL;
 
@@ -427,6 +463,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	while(region != NULL)
 	{
 		struct as_region* temp = (struct as_region*)region->node;
+		KASSERT(temp != NULL);
 		vaddr_t vaddr = temp->region_base;
 		size_t npages = temp->region_npages;
 	
@@ -460,7 +497,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	if(is_valid == false)
 	{
 		// check stack.  
-		if(faultaddress > VM_STACKBOUND && faultaddress <= USERSTACK)
+		if(faultaddress >= VM_STACKBOUND && faultaddress <= USERSTACK - PAGE_SIZE)
 		{	
 			is_valid = true;
 			is_stack_page = true;
@@ -472,6 +509,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(is_valid == false)
 	{
+		
 		// kill the process?
 //		spinlock_release(tlb_splock);
 		return EFAULT; // this is what dumbvm returns.
@@ -525,6 +563,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	while(temp != NULL)
 	{
 		struct page_table_entry* page = (struct page_table_entry*)temp->node;
+		if(page == NULL)
+		{
+		 	in_page_table = true;
+		
+		}
 		KASSERT(page != NULL);
 
 		if(page->vaddr == faultaddress)
@@ -532,9 +575,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			in_page_table = true;
 			paddr = page->paddr;
 			// check if anything went horribly wrong.
-			KASSERT(can_read == page->can_read);
+	//		KASSERT(can_read == page->can_read);
 		//	KASSERT(can_write == page->can_write);
-			KASSERT(can_execute == page->can_execute);
+	//		KASSERT(can_execute == page->can_execute);
 			break;
 		}
 		temp = temp->next;
@@ -593,16 +636,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	void* v= kmalloc(PAGE_SIZE);
 	if(v == NULL)	
 		return ENOMEM;
-	
+		
 	paddr = KVADDR_TO_PADDR((vaddr_t)v);
-
+	as_zero_region(paddr,1);
 	// create a page table entry
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 	p->vaddr = faultaddress;
 	p->paddr = paddr;
-	p->can_read = can_read;
-	p->can_write = can_write;
-	p->can_execute = can_execute;
+//	p->can_read = can_read;
+//	p->can_write = can_write;
+//	p->can_execute = can_execute;
 
 	// add this to the page table
 	int i = add_node(&as->as_page_list, p);
@@ -652,158 +695,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return 0;
 
 
-
-/*
-	switch(faulttype)
-	{
-		case VM_FAULT_READONLY:
-		{
-		
-		
-		
-			break;
-		}
-
-		case VM_FAULT_READ:
-		{
-		
-		
-		
-			break;
-		}
-		case VM_FAULT_WRITE:
-		{
-		
-		
-		
-			break;
-		}
-		
-		default:
-		{
-			spinlock_release(tlb_splock);
-			return EINVAL;
-		}
-	
-	}
-
-	spinlock_release(tlb_splock);
-	return 0;
-	
-*/
-
-/*
-	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
-	paddr_t paddr;
-	int i;
-	uint32_t ehi, elo;
-	struct addrspace *as;
-	int spl;
-
-	faultaddress &= PAGE_FRAME;
-
-	DEBUG(DB_VM, "dumbvm: fault: 0x%x\n", faultaddress);
-
-	switch (faulttype) {
-	    case VM_FAULT_READONLY:
-		// We always create pages read-write, so we can't get this 
-		panic("dumbvm: got VM_FAULT_READONLY\n");
-	    case VM_FAULT_READ:
-	    case VM_FAULT_WRITE:
-		break;
-	    default:
-		return EINVAL;
-	}
-
-	if (curproc == NULL) {
-		
-		// No process. This is probably a kernel fault early
-		// in boot. Return EFAULT so as to panic instead of
-		// getting into an infinite faulting loop.
-		 
-		return EFAULT;
-	}
-
-	as = proc_getas();
-	if (as == NULL) {
-		
-		 // No address space set up. This is probably also a
-		 //kernel fault early in boot.
-		 
-		return EFAULT;
-	}
-
-	 //Assert that the address space has been set up properly. 
-	KASSERT(as->as_vbase1 != 0);
-	KASSERT(as->as_pbase1 != 0);
-	KASSERT(as->as_npages1 != 0);
-	KASSERT(as->as_vbase2 != 0);
-	KASSERT(as->as_pbase2 != 0);
-	KASSERT(as->as_npages2 != 0);
-	KASSERT(as->as_stackpbase != 0);
-	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-	KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
-	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-	KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
-	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
-
-	vbase1 = as->as_vbase1;
-	vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
-	vbase2 = as->as_vbase2;
-	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
-	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
-	stacktop = USERSTACK;
-
-	if (faultaddress >= vbase1 && faultaddress < vtop1) {
-		paddr = (faultaddress - vbase1) + as->as_pbase1;
-	}
-	else if (faultaddress >= vbase2 && faultaddress < vtop2) {
-		paddr = (faultaddress - vbase2) + as->as_pbase2;
-	}
-	else if (faultaddress >= stackbase && faultaddress < stacktop) {
-		paddr = (faultaddress - stackbase) + as->as_stackpbase;
-	}
-	else {
-		return EFAULT;
-	}
-
-	// make sure it's page-aligned 
-	KASSERT((paddr & PAGE_FRAME) == paddr);
-
-	// Disable interrupts on this CPU while frobbing the TLB. 
-	spl = splhigh();
-
-	for (i=0; i<NUM_TLB; i++) {
-		tlb_read(&ehi, &elo, i);
-		if (elo & TLBLO_VALID) {
-			continue;
-		}
-		ehi = faultaddress;
-		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
-		tlb_write(ehi, elo, i);
-		splx(spl);
-		return 0;
-	}
-
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
-	splx(spl);
-	return EFAULT;
-	*/
 }
 
-/*
-paddr_t get_physical_page_address(struct addrspace*as, vaddr_t vaddr)
-{
-	paddr_t paddr = 0;
-	if(as == NULL)
-		return 0;
-	
-	struct list_node* page_table = as->as_page_list;
-
-
-
-
-
-}*/
 
