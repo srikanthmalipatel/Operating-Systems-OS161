@@ -21,7 +21,11 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     vaddr_t entrypoint, stackptr;
     int result;
 
-    if(arguments == NULL) {
+	if(progname == NULL || progname == (void *)0x80000000 || progname == (void *)0x40000000) {
+		return EFAULT;
+	}
+
+    if(arguments == NULL || arguments == (void *)0x80000000 || arguments == (void *)0x40000000) {
         return EFAULT;
     }
     /* This process should have an address space copied during fork */
@@ -39,7 +43,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         kfree(_progname);
         return EINVAL;
     }
-    P(esem);
+
     char *args = (char *) kmalloc(sizeof(char)*ARG_MAX);
     result = copyinstr((const_userptr_t)arguments, args, ARG_MAX, &size);
     if(result) {
@@ -153,7 +157,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         olen = len;
         len = len + (4 - len%4);
 
-        char *arg = kmalloc(sizeof(len));
+        char *arg = kmalloc(len);
         //arg = kstrdup(args+prevlen);
 
         //kprintf("%s\n", arg);
@@ -193,7 +197,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         }
         prevlen += 4;
     }
-    V(esem);
     /*vaddr_t tmp = stackptr+prevlen;
     result = copyin((const_userptr_t)stackptr, args, ARG_MAX);
     for(i=0; i<prevlen; i++) {
