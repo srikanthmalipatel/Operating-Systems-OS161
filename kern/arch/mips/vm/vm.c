@@ -292,29 +292,29 @@ free_kpages(vaddr_t addr)
 
 
 			/// **** ALSO CLEAR THE TLB ENTRY FOR THIS PAGE ******
-			if(curproc->pid != 1)
-		//	if(strcmp(curproc->p_name,"[kernel]") != 0 || curproc->pid != 1)
+		//	if(curproc->pid != 1)
+			if(strcmp(curproc->p_name,"[kernel]") != 0)
 			{
 				struct addrspace* as = NULL;
 				as = proc_getas();
-				KASSERT(as != NULL);
+		//		KASSERT(as != NULL);
 		//*********** check this again ***********//
-			/*	if(as == NULL)
+				if(as == NULL)
 				{
 					page_index++;
 					chunks--;
 					continue;
 				}
-				*/
+				
 					
 				struct list_node* temp = as->as_page_list;
-		/*		if(temp == NULL)
+				if(temp == NULL)
 				{
 					page_index++;
 					chunks--;
 					continue;
-				}*/
-				KASSERT(temp!= NULL);
+				}
+			//	KASSERT(temp!= NULL);
 
 				struct list_node* prev = NULL;
 				struct page_table_entry* p = (struct page_table_entry*)temp->node;
