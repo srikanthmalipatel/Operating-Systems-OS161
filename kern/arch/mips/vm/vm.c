@@ -104,9 +104,9 @@ vm_bootstrap(void)
 		else
 			coremap[i].state = FREE;
 
-		coremap[i].virtual_address = 0;
+//		coremap[i].virtual_address = 0;
 		coremap[i].chunks = -1;
-		coremap[i].as = NULL;
+//		coremap[i].as = NULL;
 	
 	}
 
@@ -140,8 +140,9 @@ dumbvm_can_sleep(void)
 
 static
 paddr_t
-getppages(unsigned long npages)
+getppages(unsigned long npages, bool is_user_page)
 {
+	(void)is_user_page;
 	paddr_t addr = 0;
 	if(vm_initialized == false)
 	{
@@ -224,7 +225,7 @@ alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	pa = getppages(npages);
+	pa = getppages(npages, false);
 	if (pa==0) 
 	{
 		return 0;
@@ -235,16 +236,131 @@ alloc_kpages(unsigned npages)
 	
 }
 
+
+
+paddr_t get_user_page()
+{
+	paddr_t pa;
+	pa = getppages(1,true);
+
+	return pa;
+
+
+
+}
+
+void free_user_page(paddr_t paddr, struct addrspace* as)
+{
+	KASSERT(as!= NULL);
+	
+	uint32_t page_index = paddr/ PAGE_SIZE;
+		
+	if(page_index > coremap_count)
+		return;
+
+	spinlock_acquire(cm_splock);
+
+	
+	int chunks = coremap[page_index].chunks;
+		
+		
+	if(coremap[page_index].state != FIXED)
+		kprintf("*** calling free on a non dirty page ****\n");
+	while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
+	{
+		if(coremap[page_index].state != FIXED)
+		{
+			kprintf("*** freeing a non dirty page **** \n");
+			
+		}
+	//	kprintf("freeing page : %d \n", page_index);
+		coremap[page_index].state = FREE;
+		coremap[page_index].chunks = -1; // sheer paranoia.
+		as_zero_region(page_index*PAGE_SIZE, 1);
+				
+		struct page_table_entry* temp = as->as_page_list;
+		if(temp == NULL)
+		{
+			page_index++;
+			chunks--;
+			continue;
+		}
+		//	KASSERT(temp!= NULL);
+
+		struct page_table_entry* prev = NULL;
+		if(temp->paddr == page_index*PAGE_SIZE)
+		{
+			as->as_page_list = temp->next;	
+			kfree(temp);
+	
+		}
+		else
+		{
+			while(temp != NULL)
+			{
+				if(temp->paddr == page_index*PAGE_SIZE)
+				{
+					KASSERT(prev != NULL);
+					prev->next = temp->next;
+					kfree(temp);
+					break;
+				
+				}
+				else
+				{
+					prev = temp;
+					temp = temp->next;
+				}
+	
+			}
+		}
+
+		spinlock_acquire(tlb_splock);
+		int i, spl;
+		spl = splhigh();
+		uint32_t elo,ehi;
+		for (i=0; i<NUM_TLB; i++) 
+		{
+			tlb_read(&ehi, &elo, i);
+			if (elo & TLBLO_VALID) 
+			{
+				elo &= PAGE_SIZE; // removing the other meta bits.
+				if(elo == page_index* PAGE_SIZE)
+				{
+					tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+					break;	
+				}
+			}
+		}
+
+		splx(spl);
+		spinlock_release(tlb_splock);
+
+		chunks--;
+		page_index++;
+			
+	}
+
+	spinlock_release(cm_splock);
+
+}
+
 void
-free_kpages(vaddr_t addr)
+free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 {
 	if(vm_initialized == false)
 		return;
-//	kprintf("calling free on vaddr : %d \n", addr);	
+
+	if(is_user_page == true)
+		KASSERT(as != NULL);
+	
+//	if( is_user_page == true)
+  //  	kprintf("calling free on vaddr : %d \n", addr);	
 //	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
  	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
-		
+
+	
 /*	if(page_index < first_free_index || page_index >= coremap_count)
 	{
 		return;
@@ -293,18 +409,12 @@ free_kpages(vaddr_t addr)
 
 			/// **** ALSO CLEAR THE TLB ENTRY FOR THIS PAGE ******
 		//	if(curproc->pid != 1)
-			if(strcmp(curproc->p_name,"[kernel]") != 0)
+	/*		if(is_user_page && strcmp(curproc->p_name,"[kernel]") != 0)
 			{
-				struct addrspace* as = NULL;
-				as = proc_getas();
-		//		KASSERT(as != NULL);
-		//*********** check this again ***********//
-				if(as == NULL)
-				{
-					page_index++;
-					chunks--;
-					continue;
-				}
+			//	struct addrspace* as = NULL;
+			//	as = proc_getas();
+				KASSERT(as != NULL);
+				// checked. no problem to do it like this. can call malloc and free even before address space is setup.
 				
 					
 				struct list_node* temp = as->as_page_list;
@@ -374,7 +484,7 @@ free_kpages(vaddr_t addr)
 				spinlock_release(tlb_splock);
 
 
-			}
+			}*/
 
 			chunks--;
 			page_index++;
@@ -454,16 +564,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 //	spinlock_acquire(tlb_splock);
 	//check if fault_address is valid.
 	faultaddress &= PAGE_FRAME;
-	struct list_node* region = as->as_region_list;
+	struct as_region* temp = as->as_region_list;
 
 	bool is_valid = false;
 	int can_read = 0, can_write = 0, can_execute = 0;
 	bool is_stack_page = false, is_heap_page = false;
 
-	while(region != NULL)
+	while(temp != NULL)
 	{
-		struct as_region* temp = (struct as_region*)region->node;
-		KASSERT(temp != NULL);
 		vaddr_t vaddr = temp->region_base;
 		size_t npages = temp->region_npages;
 	
@@ -477,7 +585,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			
 			break;
 		}
-		region = region->next;
+		temp = temp->next;
 	}
 
 	if(is_valid == false)
@@ -509,11 +617,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(is_valid == false)
 	{
-		
-		// kill the process?
-//		spinlock_release(tlb_splock);
 		return EFAULT; // this is what dumbvm returns.
-	
 	}
 
 	//if it reaches here, then the page is valid
@@ -558,17 +662,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// check if it is a page fault.
 	bool in_page_table = false;
 	paddr_t paddr = 0;
-	struct list_node* temp = as->as_page_list;
+	struct page_table_entry* page = as->as_page_list;
 
-	while(temp != NULL)
+	while(page != NULL)
 	{
-		struct page_table_entry* page = (struct page_table_entry*)temp->node;
-		if(page == NULL)
-		{
-		 	in_page_table = true;
-		
-		}
-		KASSERT(page != NULL);
 
 		if(page->vaddr == faultaddress)
 		{
@@ -580,7 +677,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	//		KASSERT(can_execute == page->can_execute);
 			break;
 		}
-		temp = temp->next;
+		page = page->next;
 	
 	}
 
@@ -633,11 +730,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// Now to the fun part, TLB_FAULT and PAGE_FAULT
     // create memory for this page	
 
-	void* v= kmalloc(PAGE_SIZE);
-	if(v == NULL)	
+	paddr = get_user_page();
+	if(paddr == 0)	
 		return ENOMEM;
 		
-	paddr = KVADDR_TO_PADDR((vaddr_t)v);
 	as_zero_region(paddr,1);
 	// create a page table entry
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
@@ -648,7 +744,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 //	p->can_execute = can_execute;
 
 	// add this to the page table
-	int i = add_node(&as->as_page_list, p);
+	int i = page_list_add_node(&as->as_page_list, p);
 	if(i == -1)
 		return ENOMEM;
 	

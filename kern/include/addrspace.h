@@ -72,9 +72,9 @@ struct addrspace {
         * each entry in the list contains the vaddr,paddr and permissions corresponding to a page
         * page status - unmapped/mapped/swapped.
         */
-        struct list_node* as_region_list;
-        struct list_node* as_page_list;
-        vaddr_t as_stack_end;
+        struct as_region* as_region_list;
+        struct page_table_entry* as_page_list;
+//        vaddr_t as_stack_end;
         vaddr_t as_heap_start;
         vaddr_t as_heap_end;
         
@@ -86,16 +86,18 @@ struct as_region
 	// should really use bitfields on all structs.
 	vaddr_t region_base;
 	size_t region_npages;
-	int can_read ;
-	int can_write ;
-	int configured_can_write ; // the one which load_elf provides. This will be used in as_prepare_load and as_complete_load
-	int can_execute ;
+	unsigned int can_read : 1 ;
+	unsigned int can_write : 1 ;
+	unsigned int configured_can_write : 1 ; // the one which load_elf provides. This will be used in as_prepare_load and as_complete_load
+	unsigned int can_execute : 1 ;
+	struct as_region* next;
 };
 
 struct page_table_entry
 {
 	vaddr_t vaddr;
 	paddr_t paddr;
+	struct page_table_entry* next;
 //	int can_read ;
 //	int can_write ;
 //	int can_execute ;

@@ -64,7 +64,7 @@ as_create(void)
 	 */
 	as->as_page_list = NULL;
 	as->as_region_list = NULL;
-	as->as_stack_end = 0;
+//	as->as_stack_end = 0;
 	as->as_heap_start = 0;
 	as->as_heap_end = 0;
 	return as;
@@ -84,36 +84,34 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	 * Write this.
 	 */
 
-	struct list_node* temp1 = old->as_region_list;
-	while(temp1 != NULL)
+	struct as_region* r_old = old->as_region_list;
+	while(r_old != NULL)
 	{
 		struct as_region* r_new = (struct as_region*)kmalloc(sizeof(struct as_region));
 		if(r_new == NULL)
 			return ENOMEM;
 
-		struct as_region* r_old = (struct as_region*)temp1->node;
 		r_new->region_base = r_old->region_base;
 		r_new->region_npages = r_old->region_npages;
 		r_new->can_read = r_old->can_read;
 		r_new->can_write = r_old->can_write;
 		r_new->can_execute = r_old->can_execute; 
 
-		int ret = add_node(&newas->as_region_list,r_new); 
+		int ret = region_list_add_node(&newas->as_region_list,r_new); 
 		if(ret == -1)
 			return ENOMEM;
 		
-		temp1 = temp1->next;
+		r_old = r_old->next;
 	}
 
-	temp1 = old->as_page_list;
+	struct page_table_entry* p_old = old->as_page_list;
 //	spinlock_acquire(cm_splock);
-	while(temp1 != NULL)
+	while(p_old != NULL)
 	{
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 		if(p_new == NULL)
 			return ENOMEM;
 
-		struct page_table_entry* p_old = (struct page_table_entry* )temp1->node;
 		p_new->vaddr = p_old->vaddr; // virtual addresses can be the same, no issue there.
 
 		// Now, how do i copy the actual page,
@@ -125,29 +123,26 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 //		p_new->can_write = p_old->can_write;
 //		p_new->can_execute = p_old->can_execute;
 
-		void *page = kmalloc(PAGE_SIZE); // but this returns kernel virtual address. but that's ok, cause we are mapping it to a user space virtual address.
-										// owner gets set as the kernel though. This probably is trouble when swapping. Change the coremap value ??
-										// or not, just set it to curproc in the kmalloc code.
-		memmove(page,
+		paddr_t paddr = get_user_page();
+		memmove((void*)PADDR_TO_KVADDR(paddr),
 			(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
 			PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
 														// the function will translate it into a physical address again and free it. ugly Hack. but no other way.
 
-		p_new->paddr = KVADDR_TO_PADDR((vaddr_t)page);
+		p_new->paddr = paddr;
         
 
-		int ret = add_node(&newas->as_page_list,p_new);
+		int ret = page_list_add_node(&newas->as_page_list,p_new);
 		if(ret == -1)
 		{
 	//		spinlock_release(cm_splock);
 			return ENOMEM;
 		}
-		temp1 = temp1->next;
+		p_old = p_old->next;
 	
 	}
 //	spinlock_release(cm_splock);
 
-	(void)old;
 
 	*ret = newas;
 	return 0;
@@ -159,26 +154,25 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-	
+	KASSERT(as != NULL);	
 	// need to free the individual pages as well, that's why this is not as straight forward
-	struct list_node* cur = as->as_page_list;
-	struct list_node* next = NULL;
+	struct page_table_entry* cur = as->as_page_list;
+	struct page_table_entry* next = NULL;
 	while(cur != NULL)
 	{
 		next = cur->next;
-		struct page_table_entry* p = (struct page_table_entry*)cur->node;
-		paddr_t addr = PADDR_TO_KVADDR(p->paddr);
-		kfree((void *)addr); // is this safe?.Using this because you cannot kfree a user virtual address.
-											 	 // so we pass the KV address corresponding to the physical address.
-	//	kfree(p);
-	//	kfree(cur);
+//		struct page_table_entry* p = (struct page_table_entry*)cur->node;
+
+		vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
+		free_kpages(addr, true, as);
 		cur = next;
 	
 	}
+	page_list_delete(&(as->as_page_list));
 	as->as_page_list = NULL;
 
 	//this is straight forward though.
-	delete_list(&(as->as_region_list));
+	region_list_delete(&(as->as_region_list));
 	as->as_region_list = NULL;
 	kfree(as);
 }
@@ -279,7 +273,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		as->as_heap_end = as->as_heap_start; // just initializing, subsequent calls to sbrk will alter this value.
 	}
 
-    int ret = add_node(&(as->as_region_list), temp);
+    int ret = region_list_add_node(&(as->as_region_list), temp);
 	if(ret == -1)
 		return ENOMEM;
 
@@ -295,19 +289,13 @@ as_prepare_load(struct addrspace *as)
 	if(as == NULL)
 		return EINVAL;
 	
-	struct list_node *temp = as->as_region_list;
+	struct as_region *temp = as->as_region_list;
 	if(temp == NULL)
 		return EINVAL;
 	
 	while(temp != NULL)
 	{
-		struct as_region* temp1 = (struct as_region*)temp->node;
-		if(temp1 == NULL)
-		{
-			return EINVAL;
-		
-		}
-		temp1->can_write = 1; // doing this so that the segments can be loaded into memory. will set it back to proper values in as_complete_load.
+		temp->can_write = 1; // doing this so that the segments can be loaded into memory. will set it back to proper values in as_complete_load.
 		temp = temp->next;
 	}
 	
@@ -323,20 +311,14 @@ as_complete_load(struct addrspace *as)
 	if(as == NULL)
 		return EINVAL;
 	
-	struct list_node *temp = as->as_region_list;
+	struct as_region *temp = as->as_region_list;
 	if(temp == NULL)
 		return EINVAL;
 	
 	while(temp != NULL)
 	{
 
-		struct as_region* temp1 = (struct as_region*)temp->node;
-		if(temp1 == NULL)
-		{
-			return EINVAL;
-		
-		}
-		temp1->can_write = temp1->configured_can_write;
+		temp->can_write = temp->configured_can_write;
 		temp = temp->next;
 	}
 

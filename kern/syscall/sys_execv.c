@@ -11,7 +11,8 @@
 #include <vfs.h>
 #include <copyinout.h>
 #include <limits.h>
-
+#include <vm.h>
+#include <addrspace.h>
 extern struct semaphore* esem;
 
 int sys_execv(userptr_t progname, userptr_t *arguments) {
@@ -122,6 +123,8 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     as_activate();
 
     /* Load the executable. */
+
+    kprintf("free pages available before load_elf : %d \n", coremap_free_bytes()/4096);
     result = load_elf(v, &entrypoint);
     if(result) {
         kfree(args);
@@ -231,9 +234,14 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
             kfree(args);
             return result;
         }
-    }
+    }*/
+
+    unsigned int free = coremap_free_bytes();
+    unsigned int free_pages = free/4096;
+
+    kprintf("free pages available : %d \n", free_pages);
     kfree(_progname);
-    kfree(args);*/
+    kfree(args);
 
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 

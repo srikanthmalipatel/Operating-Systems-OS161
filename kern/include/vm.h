@@ -36,7 +36,8 @@
  * You'll probably want to add stuff here.
  */
 
-#include<linked_list.h>
+/*#include<linked_list.h>
+#include <addrspace.h>
 typedef enum state
 {
 	FREE,
@@ -49,15 +50,40 @@ typedef enum state
 
  struct coremap_entry
  {
-	vaddr_t virtual_address;
+//	vaddr_t virtual_address;
 	page_state state;
-	int chunks;
-	struct addrspace* as;
+    unsigned int chunks : 7;
+//	struct addrspace* as;
+
+ };
+*/
+#include <machine/vm.h>
+
+#include<linked_list.h>
+#include <addrspace.h>
+typedef enum state
+{
+	FREE,
+	FIXED,
+	DIRTY,
+	CLEAN
+
+}page_state;
+
+#define FREE 0
+#define FIXED 1
+#define DIRTY 2
+#define CLEAN 3
+ struct coremap_entry
+ {
+//	vaddr_t virtual_address;
+	unsigned int state : 3;
+    unsigned int chunks : 7;
+//	struct addrspace* as;
 
  };
 
-#include <machine/vm.h>
-
+struct addrspace* as;
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
 #define VM_FAULT_WRITE       1    /* A write was attempted */
@@ -72,7 +98,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
-void free_kpages(vaddr_t addr);
+void free_kpages(vaddr_t addr, bool, struct addrspace* as);
+
+paddr_t get_user_page(void);
+void free_user_page(paddr_t paddr, struct addrspace* as);
 
 /*
  * Return amount of memory (in bytes) used by allocated coremap pages.  If
