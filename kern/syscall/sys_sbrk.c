@@ -3,6 +3,11 @@
 
 int sys_sbrk(intptr_t amount, int* retval)
 {
+#if OPT_DUMBVM
+    (void) amount;
+    (void) retval;
+    return 0;
+#else
 	struct addrspace* as = proc_getas();
 	if(as == NULL)
 		return ENOMEM;
@@ -63,5 +68,6 @@ int sys_sbrk(intptr_t amount, int* retval)
 	*retval = heap_end;
 	as->as_heap_end += amount;
 	return 0;
+#endif
 
 }
