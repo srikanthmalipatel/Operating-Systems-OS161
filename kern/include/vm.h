@@ -60,7 +60,6 @@ typedef enum state
 #include <machine/vm.h>
 
 #include<linked_list.h>
-#include <addrspace.h>
 typedef enum state
 {
 	FREE,
