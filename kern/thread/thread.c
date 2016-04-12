@@ -872,9 +872,11 @@ void
 thread_exit(void)
 {
 	struct thread *cur;
+	struct proc *cproc;
 
     //kprintf("[thread_exit] Exiting thread %s\n", curthread->t_name);
 	cur = curthread;
+	cproc = curthread->t_proc;
 
 	/*
 	 * Detach from our process. You might need to move this action
@@ -882,6 +884,7 @@ thread_exit(void)
 	 */
 	proc_remthread(cur);
 
+    V(cproc->p_exitsem);
 	/* Make sure we *are* detached (move this only if you're sure!) */
 	KASSERT(cur->t_proc == NULL);
 
