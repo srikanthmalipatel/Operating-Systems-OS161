@@ -94,7 +94,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
 
     /* Load the executable. */
 
-    kprintf("free pages available before load_elf : %d \n", coremap_free_bytes()/4096);
+  //  kprintf("free pages available before load_elf : %d \n", coremap_free_bytes()/4096);
     result = load_elf(v, &entrypoint);
     if(result) {
         kfree(args);
@@ -162,10 +162,10 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     kfree(stkargs);
     stackptr -= 4*sizeof(char);
     
-    unsigned int free = coremap_free_bytes();
-    unsigned int free_pages = free/4096;
+    //unsigned int free = coremap_free_bytes();
+  //  unsigned int free_pages = free/4096;
 
-    kprintf("free pages available : %d \n", free_pages);
+  //  kprintf("free pages available : %d \n", free_pages);
 
     lock_release(execlock);
     //kprintf("****EXECV]***** process-%d released exec lock", proc->pid);
