@@ -23,8 +23,8 @@ int sys_sbrk(intptr_t amount, int* retval)
 	
 	}
 
-	if(amount < 0 )
-		kprintf ("in here \n");
+	//if(amount < 0 )
+//		kprintf ("in here \n");
 
 	unsigned int s = coremap_free_bytes();
 	(void)s;

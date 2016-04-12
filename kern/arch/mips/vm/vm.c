@@ -663,7 +663,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	bool in_page_table = false;
 	paddr_t paddr = 0;
 	struct page_table_entry* page = as->as_page_list;
-	unsigned int page_state = 0;
+//	unsigned int page_state = 0;
 
 	while(page != NULL)
 	{
@@ -672,7 +672,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			in_page_table = true;
 			paddr = page->paddr;
-			page_state = page->page_state;
+		//	page_state = page->page_state;
 
 			// check if anything went horribly wrong.
 	//		KASSERT(can_read == page->can_read);
@@ -685,7 +685,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 
-	if(in_page_table == true && page_state == MAPPED)
+	if(in_page_table == true)// && page_state == MAPPED)
 	{
 		//simple case. just update the tlb entry.
 		// I already have the tlb lock.
@@ -729,7 +729,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		spinlock_release(tlb_splock);
 		return 0;
 	}
-
+/*
 	if(in_page_table == true && page_state == SWAPPED)
 	{
 		// swap the page back in.
@@ -739,7 +739,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	
 		return 0;	
 	
-	}
+	}*/
 
 	// Now to the fun part, TLB_FAULT and PAGE_FAULT
     // create memory for this page	
@@ -753,7 +753,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 	p->vaddr = faultaddress;
 	p->paddr = paddr;
-	p->page_state = MAPPED;
+//	p->page_state = MAPPED;
 //	p->can_read = can_read;
 //	p->can_write = can_write;
 //	p->can_execute = can_execute;

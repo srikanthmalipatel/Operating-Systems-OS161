@@ -99,7 +99,7 @@ struct page_table_entry
 {
 	vaddr_t vaddr;
 	paddr_t paddr;
-	unsigned int page_state:1;
+//	unsigned int page_state:1;
 	struct page_table_entry* next;
 //	int can_read ;
 //	int can_write ;
