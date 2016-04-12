@@ -56,6 +56,8 @@ struct cpu;
 /* Macro to test if two addresses are on the same kernel stack */
 #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
 
+/* This lock is used for maintaining atomocity while copying the elements into kernel buffer until freeing memory allocated to them*/
+struct lock *execlock;
 
 /* States a thread can be in. */
 typedef enum {

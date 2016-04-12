@@ -137,6 +137,9 @@ runprogram(char *progname)
 	{
 		return result;
 	}
+	kfree(con_name);
+	kfree(con_name2);
+	kfree(con_name3);
 	struct file_handle* fh1 = file_handle_create();
 	fh1->file = v1;
 	fh1->openflags = O_RDONLY;
