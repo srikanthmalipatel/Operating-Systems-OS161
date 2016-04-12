@@ -24,7 +24,7 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
 
     //kprintf("****EXECV]***** process-%d trying to exec", proc->pid);
 
-    lock_acquire(execlock);
+    //lock_acquire(execlock);
     //kprintf("****EXECV]***** process-%d acquired exec lock", proc->pid);
 	if(progname == NULL || progname == (void *)0x80000000 || progname == (void *)0x40000000) {
 		return EFAULT;
@@ -160,14 +160,13 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         prevlen += 4;
     }
     kfree(stkargs);
-    stackptr -= 4*sizeof(char);
     
     unsigned int free = coremap_free_bytes();
     unsigned int free_pages = free/4096;
 
     kprintf("free pages available : %d \n", free_pages);
 
-    lock_release(execlock);
+    //lock_release(execlock);
     //kprintf("****EXECV]***** process-%d released exec lock", proc->pid);
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 
