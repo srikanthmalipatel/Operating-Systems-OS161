@@ -62,8 +62,15 @@ int sys_sbrk(intptr_t amount, int* retval)
 	}
 	
 
+/* If the amount is negative, then we have to free the memory
+ * But as of now, I'm just adjusting the heap_end. But is this correct?
+ * What if the memory to be freed, is somewhere in the middle of the heap. Then adjusting heap_end does not make sense.
+ * and how do we communicate to the coremap that this memory must be freed.
+ * sbrk just tells me the amount. However this may not be contiguous in physical memory. and I have no idea where these pages are.
+ * so How exactly do I go about freeing the memory 
+ */
 
-	amount = ROUNDUP(amount,4); // suggestion in jinghao's blog, should find out why this is done.
+//	amount = ROUNDUP(amount,4); // suggestion in jinghao's blog, should find out why this is done.
 
 	*retval = heap_end;
 	as->as_heap_end += amount;

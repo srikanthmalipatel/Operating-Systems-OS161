@@ -21,14 +21,14 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 // recitation slides ask us to use copyin/out to check if this pointer is valid, so i guess that VOP_WRITE does not do it for us.
 	
 	int result;
-	char kern_buffer[nBytes + 1];
+//	char kern_buffer[nBytes + 1];
 
 	// are we using this properly?.. check jinghao's blog for example
 	// no actual use for the kern buffer, just doing this to check if memory location is valid.
-	result = copyin(buf, kern_buffer, nBytes); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
-	if(result)
+//	result = copyin(buf, kern_buffer, nBytes); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
+//	if(result)
 	{
-		return result;
+//		return result;
 
 	}
 
