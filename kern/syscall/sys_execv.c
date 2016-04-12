@@ -22,6 +22,10 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     vaddr_t entrypoint, stackptr;
     int result;
 
+    //kprintf("****EXECV]***** process-%d trying to exec", proc->pid);
+
+    lock_acquire(execlock);
+    //kprintf("****EXECV]***** process-%d acquired exec lock", proc->pid);
 	if(progname == NULL || progname == (void *)0x80000000 || progname == (void *)0x40000000) {
 		return EFAULT;
 	}
@@ -44,12 +48,12 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         kfree(_progname);
         return EINVAL;
     }
+    kfree(_progname);
 
     char *args = (char *) kmalloc(sizeof(char)*ARG_MAX);
     result = copyinstr((const_userptr_t)arguments, args, ARG_MAX, &size);
     if(result) {
         kfree(args);
-        kfree(_progname);
         return EFAULT;
     }
     /* Copy the user arguments on to the kernel */
@@ -59,49 +63,16 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         result = copyinstr((const_userptr_t) arguments[count], args+offset, ARG_MAX, &size);
         if(result) {
             kfree(args);
-            kfree(_progname);
             return EFAULT;
         }
         offset += size;
         count++;
     }
 
-
-   /* while((char *) arguments[i] != NULL) {
-        char *buf = (char *) kmalloc(sizeof(char)*70000);
-        result = copyinstr((const_userptr_t) arguments[i], buf, (size_t) 70000, &size);
-        if(result) {
-            kfree(args);
-            kfree(_progname);
-            return EFAULT;
-    }
-        // get the length of the string and then increase the length if it is not four bytes aligned
-      int len = strlen(buf); 
-      int newlen = len + (4 - (strlen(buf) & 3));
-
-        // copy the string into the arguments array 
-        // TODO: we can copy the string from buf instead of doing a copyinstr. check if memory permits for this operation
-
-        int j;
-        args[i] = (char *) kmalloc(sizeof(char)*(newlen+2));
-
-        strcpy(args[i], buf);
-        // Add padding such that it is 4 bytes aligned
-        // TODO: check if we are adding padding at right position
-        for(j=len; j<=newlen; j++) {
-            args[i][j] = '\0';
-        }
-        kfree(buf);
-        i++;
-    }
-    args[i] = NULL;
-    */
-    
     /* Open the file */
     result = vfs_open((char *)progname, O_RDONLY, 0, &v);
     if(result) {
         kfree(args);
-        kfree(_progname);
         return result;
     }
 
@@ -114,7 +85,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     as = as_create();
     if(as == NULL) {
         kfree(args);
-        kfree(_progname);
         vfs_close(v);
         return ENOMEM;
     }
@@ -128,7 +98,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     result = load_elf(v, &entrypoint);
     if(result) {
         kfree(args);
-        kfree(_progname);
         vfs_close(v);
         return result;
     }
@@ -140,18 +109,10 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     result = as_define_stack(as, &stackptr);
     if(result) {
         kfree(args);
-        kfree(_progname);
         return result;
     }
-    // Copy the user arguments into the address space. First copy the arguments from user space into kernel space 
-    /*for(i=0 ; i<offset; i++) {
-        if(args[i] == '\0')
-            kprintf("0");
-        kprintf("%c", args[i]);
-    }
-    kprintf("\n");*/
+
     i = 0;
-    //kprintf("%d\n", offset);
     int prevlen = 0, cur = 0;
     char **stkargs=(char**) kmalloc(sizeof(char*)*(count+1));
     while(i < offset) {
@@ -177,7 +138,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         result = copyout((const void *)arg, (userptr_t)stackptr, (size_t)len);
         if(result) {
             kfree(args);
-            kfree(_progname);
             kfree(stkargs);
             return result;
         }
@@ -187,62 +147,28 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         i++;
     }
     stkargs[cur] = NULL;
+    kfree(args);
 
     for(i=(cur) ; i>=0; i--) {
         stackptr = stackptr - sizeof(char *);
         //kprintf("copying arg %d at [%p]\n", i, *(stkargs+i));
         result = copyout((const void *)(stkargs+i), (userptr_t) stackptr, (sizeof(char *)));
         if(result) {
-            kfree(args);
-            kfree(_progname);
             kfree(stkargs);
             return result;
         }
         prevlen += 4;
     }
-    /*vaddr_t tmp = stackptr+prevlen;
-    result = copyin((const_userptr_t)stackptr, args, ARG_MAX);
-    for(i=0; i<prevlen; i++) {
-        if(args[i] == '\0')
-            kprintf("[%x] 0\n", tmp--);
-        kprintf("[%x] %c\n", tmp--, args[i]);
-    }
-    kprintf("\n");*/
-
-
-    /*i = 0;
-    while(args[i] != NULL) {
-        stackptr -= strlen(args[i]);
-        result = copyout((const void*) args[i], (userptr_t) stackptr, (size_t)strlen(args[i]));
-        if(result) {
-            kfree(_progname);
-            kfree(args);
-            return result;
-        }
-        kfree(args[i]);
-        args[i] = (char *) stackptr;
-        i++;
-    }
+    kfree(stkargs);
     stackptr -= 4*sizeof(char);
     
-    int k;
-    for(k = i-1; k>=0; k--) {
-        stackptr = stackptr - sizeof(char *);
-        result = copyout((const void*) (args + k), (userptr_t) stackptr, sizeof(char *));
-        if(result) {
-            kfree(_progname);
-            kfree(args);
-            return result;
-        }
-    }*/
-
     unsigned int free = coremap_free_bytes();
     unsigned int free_pages = free/4096;
 
     kprintf("free pages available : %d \n", free_pages);
-    kfree(_progname);
-    kfree(args);
 
+    lock_release(execlock);
+    //kprintf("****EXECV]***** process-%d released exec lock", proc->pid);
     enter_new_process(count, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 
     panic("enter_new_process returned\n");
