@@ -19,7 +19,6 @@ int sys__exit(int exitcode) {
         file_table_cleanup(curproc->t_file_table);
         proc->exited = true;
         proc->exitcode = _MKWAIT_EXIT(exitcode);
-        V(proc->p_exitsem);
         thread_exit();
     return 0;
 }
