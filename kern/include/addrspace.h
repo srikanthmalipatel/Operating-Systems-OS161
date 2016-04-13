@@ -41,7 +41,7 @@
 
 struct vnode;
 
-#define VM_STACKPAGES        200
+#define VM_STACKPAGES        100
 #define VM_STACKBOUND        (USERSTACK - VM_STACKPAGES*PAGE_SIZE)     
 
 /*

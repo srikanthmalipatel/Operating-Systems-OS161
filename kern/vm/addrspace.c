@@ -143,7 +143,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 //	spinlock_release(cm_splock);
 
-
+	newas->as_heap_start = old->as_heap_start;
+	newas->as_heap_end = old->as_heap_end;
 	*ret = newas;
 	return 0;
 }
@@ -163,8 +164,8 @@ as_destroy(struct addrspace *as)
 		next = cur->next;
 //		struct page_table_entry* p = (struct page_table_entry*)cur->node;
 
-		vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
-		free_kpages(addr, true, as);
+	//	vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
+		free_user_page(cur->paddr,as);
 		cur = next;
 	
 	}

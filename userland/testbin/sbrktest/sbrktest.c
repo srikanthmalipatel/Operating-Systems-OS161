@@ -1050,6 +1050,8 @@ stresstest(unsigned long seed, bool large)
 		if (!neg && num + pages > (large ? 128 : 32)) {
 			neg = 1;
 		}
+	//	if(neg == 1)
+	//	tprintf("neg is %d \n", neg);
 		if (neg) {
 			dosbrk(-(pages * PAGE_SIZE));
 			num -= pages;
@@ -1064,6 +1066,7 @@ stresstest(unsigned long seed, bool large)
 		for (j=0; j<num; j++) {
 			if (checkpagelight(op, j, true)) {
 				tprintf("\n");
+				tprintf("neg : %d \n", neg);
 				warnx("FAILED: data corrupt on page %u", j);
 				bad = true;
 			}

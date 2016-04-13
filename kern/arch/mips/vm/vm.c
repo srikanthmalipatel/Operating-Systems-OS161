@@ -208,8 +208,9 @@ getppages(unsigned long npages, bool is_user_page)
 					
 				}
 			}
-			if(addr == 0)
-				kprintf("cannot allocate %lu pages \n", npages);
+	//		if(addr == 0)
+	//			kprintf("cannot allocate %lu pages \n", npages);
+	
 			spinlock_release(cm_splock);
 		}
 			
@@ -244,9 +245,6 @@ paddr_t get_user_page()
 	pa = getppages(1,true);
 
 	return pa;
-
-
-
 }
 
 void free_user_page(paddr_t paddr, struct addrspace* as)
@@ -254,94 +252,97 @@ void free_user_page(paddr_t paddr, struct addrspace* as)
 	KASSERT(as!= NULL);
 	
 	uint32_t page_index = paddr/ PAGE_SIZE;
-		
-	if(page_index > coremap_count)
-		return;
+	
+	KASSERT(page_index < coremap_count);
+	KASSERT(page_index >= first_free_index);
+	
+	KASSERT(coremap[page_index].state == FIXED);
 
 	spinlock_acquire(cm_splock);
 
+	coremap[page_index].state = FREE;
+	coremap[page_index].chunks = -1; // sheer paranoia.
+//	as_zero_region(page_index*PAGE_SIZE, 1);
 	
-	int chunks = coremap[page_index].chunks;
-		
-		
-	if(coremap[page_index].state != FIXED)
-		kprintf("*** calling free on a non dirty page ****\n");
-	while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
+	spinlock_release(cm_splock);
+
+
+	spinlock_acquire(tlb_splock);
+	int i, spl;
+	spl = splhigh();
+	uint32_t elo,ehi;
+	for (i=0; i<NUM_TLB; i++) 
 	{
-		if(coremap[page_index].state != FIXED)
+		tlb_read(&ehi, &elo, i);
+		if (elo & TLBLO_VALID) 
 		{
-			kprintf("*** freeing a non dirty page **** \n");
-			
-		}
-	//	kprintf("freeing page : %d \n", page_index);
-		coremap[page_index].state = FREE;
-		coremap[page_index].chunks = -1; // sheer paranoia.
-		as_zero_region(page_index*PAGE_SIZE, 1);
-				
-		struct page_table_entry* temp = as->as_page_list;
-		if(temp == NULL)
-		{
-			page_index++;
-			chunks--;
-			continue;
-		}
-		//	KASSERT(temp!= NULL);
-
-		struct page_table_entry* prev = NULL;
-		if(temp->paddr == page_index*PAGE_SIZE)
-		{
-			as->as_page_list = temp->next;	
-			kfree(temp);
-	
-		}
-		else
-		{
-			while(temp != NULL)
+			elo &= PAGE_SIZE; // removing the other meta bits.
+			if(elo == page_index* PAGE_SIZE)
 			{
-				if(temp->paddr == page_index*PAGE_SIZE)
-				{
-					KASSERT(prev != NULL);
-					prev->next = temp->next;
-					kfree(temp);
-					break;
-				
-				}
-				else
-				{
-					prev = temp;
-					temp = temp->next;
-				}
-	
+				tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+				break;	
 			}
 		}
-
-		spinlock_acquire(tlb_splock);
-		int i, spl;
-		spl = splhigh();
-		uint32_t elo,ehi;
-		for (i=0; i<NUM_TLB; i++) 
-		{
-			tlb_read(&ehi, &elo, i);
-			if (elo & TLBLO_VALID) 
-			{
-				elo &= PAGE_SIZE; // removing the other meta bits.
-				if(elo == page_index* PAGE_SIZE)
-				{
-					tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-					break;	
-				}
-			}
-		}
-
-		splx(spl);
-		spinlock_release(tlb_splock);
-
-		chunks--;
-		page_index++;
-			
 	}
 
-	spinlock_release(cm_splock);
+	splx(spl);
+	spinlock_release(tlb_splock);
+
+
+	struct page_table_entry* temp = as->as_page_list;
+	KASSERT(temp!= NULL);
+
+	struct page_table_entry* prev = NULL;
+	if(temp->paddr == page_index*PAGE_SIZE)
+	{
+		as->as_page_list = temp->next;	
+		kfree(temp);
+	
+	}
+	else
+	{
+		while(temp != NULL)
+		{
+			if(temp->paddr == page_index*PAGE_SIZE)
+			{
+				KASSERT(prev != NULL);
+				prev->next = temp->next;
+				kfree(temp);
+				break;
+				
+			}
+			else
+			{
+				prev = temp;
+				temp = temp->next;
+			}
+	
+		}
+	}
+
+}
+
+void free_heap(intptr_t amount)
+{
+	struct addrspace* as = proc_getas();
+	KASSERT(as!= NULL);
+	KASSERT(amount < 0);
+
+	intptr_t heap_end = as->as_heap_end;
+
+	intptr_t chunk_start = as->as_heap_end + amount; //amount is -ve.
+
+	struct page_table_entry* temp = as->as_page_list;
+	struct page_table_entry* next = NULL;
+	while(temp != NULL)
+	{
+		next = temp->next;
+		intptr_t vaddr = temp->vaddr;
+		if(vaddr >= chunk_start && vaddr < heap_end)
+			free_user_page(temp->paddr,as);
+
+		temp = next;
+	}
 
 }
 
@@ -353,19 +354,11 @@ free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 
 	if(is_user_page == true)
 		KASSERT(as != NULL);
-	
-//	if( is_user_page == true)
-  //  	kprintf("calling free on vaddr : %d \n", addr);	
-//	paddr_t paddr = addr - MIPS_KSEG0; // bigtime doubt here !!
+ 	
  	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 
 	
-/*	if(page_index < first_free_index || page_index >= coremap_count)
-	{
-		return;
-	}*/
-//	else
 	if(page_index > coremap_count)
 		return;
 
@@ -383,13 +376,7 @@ free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 	}
 	else
 	{
-	//	spinlock_acquire(cm_splock);
 		int chunks = coremap[page_index].chunks;
-		
-		
-	//	kprintf(" freeing index1 : %d \n", page_index);
-		if(coremap[page_index].state != FIXED)
-			kprintf("*** calling free on a non dirty page ****\n");
 		while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
 		{
 			if(coremap[page_index].state != FIXED)
@@ -397,94 +384,9 @@ free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 				kprintf("*** freeing a non dirty page **** \n");
 			
 			}
-	//		kprintf("freeing page : %d \n", page_index);
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
 			as_zero_region(page_index*PAGE_SIZE, 1);
-
-
-			// free this page from the processes page table, do this only if cur proc is not kernel
-			// there's probably a better way to do this.
-
-
-			/// **** ALSO CLEAR THE TLB ENTRY FOR THIS PAGE ******
-		//	if(curproc->pid != 1)
-	/*		if(is_user_page && strcmp(curproc->p_name,"[kernel]") != 0)
-			{
-			//	struct addrspace* as = NULL;
-			//	as = proc_getas();
-				KASSERT(as != NULL);
-				// checked. no problem to do it like this. can call malloc and free even before address space is setup.
-				
-					
-				struct list_node* temp = as->as_page_list;
-				if(temp == NULL)
-				{
-					page_index++;
-					chunks--;
-					continue;
-				}
-			//	KASSERT(temp!= NULL);
-
-				struct list_node* prev = NULL;
-				struct page_table_entry* p = (struct page_table_entry*)temp->node;
-				KASSERT(p != NULL);
-				if(p->paddr == page_index*PAGE_SIZE)
-				{
-					kfree(p);
-					as->as_page_list = temp->next;	
-					kfree(temp);
-	
-				}
-				else
-				{
-					while(temp != NULL)
-					{
-						struct page_table_entry* p = (struct page_table_entry*)temp->node;
-						KASSERT(p != NULL);
-						if(p->paddr == page_index*PAGE_SIZE)
-							{
-							KASSERT(prev != NULL);
-							prev->next = temp->next;
-							kfree(p);
-							kfree(temp);
-							break;
-				
-						}
-						else
-						{
-							prev = temp;
-							temp = temp->next;
-						}
-	
-	
-					}
-				}
-
-				spinlock_acquire(tlb_splock);
-				int i, spl;
-				spl = splhigh();
-				uint32_t elo,ehi;
-				for (i=0; i<NUM_TLB; i++) 
-				{
-					tlb_read(&ehi, &elo, i);
-					if (elo & TLBLO_VALID) 
-					{
-						elo &= PAGE_SIZE; // removing the other meta bits.
-						if(elo == page_index* PAGE_SIZE)
-						{
-							tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-							break;	
-						}
-					}
-				}
-
-				splx(spl);
-
-				spinlock_release(tlb_splock);
-
-
-			}*/
 
 			chunks--;
 			page_index++;
@@ -549,6 +451,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		faultaddress &= PAGE_FRAME;	
 	}
 	*/
+	if(faultaddress == 0x41f000)
+	{
+		faultaddress = 0x41f000;
+	}
 	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
 		return EINVAL;
 

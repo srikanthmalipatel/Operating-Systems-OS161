@@ -1,6 +1,8 @@
 #include <kern/sys_sbrk.h>
 #include <addrspace.h>
 
+struct spinlock* sbrk_splock = NULL;
+
 int sys_sbrk(intptr_t amount, int* retval)
 {
 #if OPT_DUMBVM
@@ -8,17 +10,27 @@ int sys_sbrk(intptr_t amount, int* retval)
     (void) retval;
     return 0;
 #else
+	if(sbrk_splock == NULL)
+	{
+		sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
+		spinlock_init(sbrk_splock);
+	}
+
+	spinlock_acquire(sbrk_splock);
 	struct addrspace* as = proc_getas();
 	if(as == NULL)
+	{
+		spinlock_release(sbrk_splock);
 		return ENOMEM;
-	
-	vaddr_t heap_start = as->as_heap_start;
-	vaddr_t heap_end = as->as_heap_end;
+	}
+	intptr_t heap_start = as->as_heap_start;
+	intptr_t heap_end = as->as_heap_end;
 
 
 	if(amount == 0)
 	{
 		*retval = heap_end;
+		spinlock_release(sbrk_splock);
 		return 0;
 	
 	}
@@ -33,13 +45,17 @@ int sys_sbrk(intptr_t amount, int* retval)
 	if(amount > 0 && p > coremap_free_bytes())
 	{
 		*retval = -1;
+		
+		spinlock_release(sbrk_splock);
 		return ENOMEM;
 	}
 
 	// unaligned , return inval.
-	if(amount > 0 && amount != ROUNDUP(amount,4))
+	if(amount > 0 && (amount!= ROUNDUP(amount,PAGE_SIZE)))
 	{
 		*retval = -1;
+
+		spinlock_release(sbrk_splock);
 		return EINVAL;
 	
 	}
@@ -50,6 +66,8 @@ int sys_sbrk(intptr_t amount, int* retval)
 	if(amount > 0 && request > bound) // essentially checking if heap_end + amount > VM_STACKBOUND, doing it like this to avoid overflows.
 	{
 		*retval = -1;
+
+		spinlock_release(sbrk_splock);
 		return ENOMEM;
 	
 	}
@@ -58,6 +76,8 @@ int sys_sbrk(intptr_t amount, int* retval)
 	if(heap_end + amount < heap_start)
 	{
 		*retval = -1;
+
+		spinlock_release(sbrk_splock);
 		return EINVAL;
 	}
 	
@@ -71,9 +91,13 @@ int sys_sbrk(intptr_t amount, int* retval)
  */
 
 //	amount = ROUNDUP(amount,4); // suggestion in jinghao's blog, should find out why this is done.
+	if(amount < 0)
+ 		free_heap(amount);
 
 	*retval = heap_end;
 	as->as_heap_end += amount;
+
+	spinlock_release(sbrk_splock);
 	return 0;
 #endif
 

@@ -13,7 +13,7 @@
 #include <limits.h>
 #include <vm.h>
 #include <addrspace.h>
-extern struct semaphore* esem;
+//extern struct semaphore* esem;
 
 int sys_execv(userptr_t progname, userptr_t *arguments) {
     struct proc *proc = curproc;
