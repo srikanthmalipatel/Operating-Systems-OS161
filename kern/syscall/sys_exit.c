@@ -9,6 +9,7 @@
 #include <pid.h>
 #include <kern/wait.h>
 #include <filesystem.h>
+#include <signal.h>
 
 int sys__exit(int exitcode) {
     struct proc* proc = curproc;
@@ -18,7 +19,11 @@ int sys__exit(int exitcode) {
     //kprintf("[sys__exit] Exiting thread - %s\n", curthread->t_name);
         file_table_cleanup(curproc->t_file_table);
         proc->exited = true;
-        proc->exitcode = _MKWAIT_EXIT(exitcode);
+        if(exitcode == SIGSEGV || exitcode == SIGTRAP || exitcode == SIGILL || exitcode == SIGFPE)
+        	proc->exitcode = _MKWAIT_SIG(exitcode);
+        else
+        	proc->exitcode = _MKWAIT_EXIT(exitcode);
         thread_exit();
+
     return 0;
 }

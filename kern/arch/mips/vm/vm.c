@@ -154,25 +154,16 @@ getppages(unsigned long npages, bool is_user_page)
 		spinlock_release(&stealmem_lock);
 	}
 	else
-	
 	{
-
-		//add new code here.
 		if(first_free_index + npages >= coremap_count)
 			addr = 0;
-
-
 		else
 		{
-
 			spinlock_acquire(cm_splock);
-	
-	//		kprintf(" getpages called for %lu \n",npages);
 			for(uint32_t i = first_free_index; i < coremap_count; i++)
 			{
 				if(coremap[i].state == FREE)
 				{
-					// check if we have n-1 more pages.
 					unsigned long p = 0;
 					uint32_t j = i + 1;
 					while((p < (npages - 1)) && j < coremap_count)
@@ -190,10 +181,7 @@ getppages(unsigned long npages, bool is_user_page)
 					if(p == npages - 1)
 					{
 						addr = i*PAGE_SIZE;
-						
-				//		kprintf(" allocating index %d \n", i);
 						coremap[i].chunks = npages;
-
 						for(unsigned long k = i; k < i+npages; k++)
 						{
 							// !!! Dirty should be set only when called from page_alloc. basically means that we need to update the disk.
@@ -205,18 +193,12 @@ getppages(unsigned long npages, bool is_user_page)
 						}
 						break;
 					}
-					
 				}
 			}
-	//		if(addr == 0)
-	//			kprintf("cannot allocate %lu pages \n", npages);
-	
 			spinlock_release(cm_splock);
 		}
 			
 	}
-	
-
 	return addr;
 }
 
@@ -231,13 +213,8 @@ alloc_kpages(unsigned npages)
 	{
 		return 0;
 	}
-
-//	kprintf("*** allocating vaddr : %d \n *****", PADDR_TO_KVADDR(pa));
 	return PADDR_TO_KVADDR(pa);
-	
 }
-
-
 
 paddr_t get_user_page()
 {
@@ -262,7 +239,7 @@ void free_user_page(paddr_t paddr, struct addrspace* as)
 
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
-//	as_zero_region(page_index*PAGE_SIZE, 1);
+	as_zero_region(page_index*PAGE_SIZE, 1);
 	
 	spinlock_release(cm_splock);
 
@@ -276,7 +253,7 @@ void free_user_page(paddr_t paddr, struct addrspace* as)
 		tlb_read(&ehi, &elo, i);
 		if (elo & TLBLO_VALID) 
 		{
-			elo &= PAGE_SIZE; // removing the other meta bits.
+			elo &= PAGE_FRAME; // removing the other meta bits.
 			if(elo == page_index* PAGE_SIZE)
 			{
 				tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);

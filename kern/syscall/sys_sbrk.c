@@ -1,7 +1,9 @@
 #include <kern/sys_sbrk.h>
 #include <addrspace.h>
+#include <mips/tlb.h>
 
 struct spinlock* sbrk_splock = NULL;
+extern struct spinlock* tlb_splock;
 
 int sys_sbrk(intptr_t amount, int* retval)
 {
@@ -34,9 +36,6 @@ int sys_sbrk(intptr_t amount, int* retval)
 		return 0;
 	
 	}
-
-	//if(amount < 0 )
-//		kprintf ("in here \n");
 
 	unsigned int s = coremap_free_bytes();
 	(void)s;
@@ -80,23 +79,12 @@ int sys_sbrk(intptr_t amount, int* retval)
 		spinlock_release(sbrk_splock);
 		return EINVAL;
 	}
-	
 
-/* If the amount is negative, then we have to free the memory
- * But as of now, I'm just adjusting the heap_end. But is this correct?
- * What if the memory to be freed, is somewhere in the middle of the heap. Then adjusting heap_end does not make sense.
- * and how do we communicate to the coremap that this memory must be freed.
- * sbrk just tells me the amount. However this may not be contiguous in physical memory. and I have no idea where these pages are.
- * so How exactly do I go about freeing the memory 
- */
-
-//	amount = ROUNDUP(amount,4); // suggestion in jinghao's blog, should find out why this is done.
 	if(amount < 0)
  		free_heap(amount);
 
 	*retval = heap_end;
 	as->as_heap_end += amount;
-
 	spinlock_release(sbrk_splock);
 	return 0;
 #endif

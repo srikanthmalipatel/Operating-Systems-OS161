@@ -289,6 +289,7 @@ expect_segfault(segfault_fn func)
 		func();	// This exits
 	} else {
 		result = waitpid(pid, &status, 0);
+		tprintf("status is %d \n", status);
 		if (result == -1) {
 			err(1, "waitpid");
 		}

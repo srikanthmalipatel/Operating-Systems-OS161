@@ -388,18 +388,23 @@ kmalloctest4(int nargs, char **args)
 	(void)nargs;
 	(void)args;
 
-	kprintf("Starting multipage kmalloc test...\n");
+	kprintf("Starting baba 1 multipage kmalloc test...\n");
 #if OPT_DUMBVM
 	kprintf("(This test will not work with dumbvm)\n");
 #endif
 
+	kprintf("attempting to create sem \n");
+
 	sem = sem_create("kmalloctest4", 0);
+	kprintf("created sem \n");
 	if (sem == NULL) {
 		panic("kmalloctest4: sem_create failed\n");
 	}
 
 	/* use 6 instead of 8 threads */
 	nthreads = (3*NTHREADS)/4;
+
+	kprintf("forking %d threads \n", nthreads);
 
 	for (i=0; i<nthreads; i++) {
 		result = thread_fork("kmalloctest4", NULL,
