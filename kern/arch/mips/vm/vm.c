@@ -65,6 +65,7 @@ static bool  vm_initialized = false;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock* cm_splock = NULL;
 struct spinlock* tlb_splock = NULL;
+struct spinlock* sbrk_splock = NULL;
 static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
 uint32_t coremap_count = 0;
@@ -113,6 +114,8 @@ vm_bootstrap(void)
 	vm_initialized = true;
 	tlb_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(tlb_splock);
+	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
+	spinlock_init(sbrk_splock);
 }
 
 /*

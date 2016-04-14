@@ -391,7 +391,7 @@ thread_bootstrap(void)
 	KASSERT(curthread->t_proc != NULL);
 	KASSERT(curthread->t_proc == kproc);
 
-	execlock = lock_create("exec lock");
+	//execlock = lock_create("exec lock");
 
 	/* Done */
 }

@@ -2,7 +2,7 @@
 #include <addrspace.h>
 #include <mips/tlb.h>
 
-struct spinlock* sbrk_splock = NULL;
+extern struct spinlock* sbrk_splock;
 extern struct spinlock* tlb_splock;
 
 int sys_sbrk(intptr_t amount, int* retval)
@@ -12,11 +12,6 @@ int sys_sbrk(intptr_t amount, int* retval)
     (void) retval;
     return 0;
 #else
-	if(sbrk_splock == NULL)
-	{
-		sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
-		spinlock_init(sbrk_splock);
-	}
 
 	spinlock_acquire(sbrk_splock);
 	struct addrspace* as = proc_getas();
