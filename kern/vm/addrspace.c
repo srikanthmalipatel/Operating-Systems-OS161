@@ -165,7 +165,7 @@ as_destroy(struct addrspace *as)
 //		struct page_table_entry* p = (struct page_table_entry*)cur->node;
 
 	//	vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
-		free_user_page(cur->paddr,as);
+		free_user_page(cur->paddr,as, false);
 		cur = next;
 	
 	}
