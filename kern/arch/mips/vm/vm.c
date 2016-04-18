@@ -65,7 +65,7 @@ static bool  vm_initialized = false;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock* cm_splock = NULL;
 struct spinlock* tlb_splock = NULL;
-struct spinlock* sbrk_splock = NULL;
+//struct spinlock* sbrk_splock = NULL;
 static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
 uint32_t coremap_count = 0;
@@ -114,8 +114,8 @@ vm_bootstrap(void)
 	vm_initialized = true;
 	tlb_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(tlb_splock);
-	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
-	spinlock_init(sbrk_splock);
+//	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
+//	spinlock_init(sbrk_splock);
 }
 
 /*
@@ -227,7 +227,7 @@ paddr_t get_user_page()
 	return pa;
 }
 
-void free_user_page(paddr_t paddr, struct addrspace* as)
+void free_user_page(paddr_t paddr, struct addrspace* as, bool free_node)
 {
 	KASSERT(as!= NULL);
 	
@@ -242,7 +242,7 @@ void free_user_page(paddr_t paddr, struct addrspace* as)
 
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
-	as_zero_region(page_index*PAGE_SIZE, 1);
+//	as_zero_region(page_index*PAGE_SIZE, 1);
 	
 	spinlock_release(cm_splock);
 
@@ -269,37 +269,39 @@ void free_user_page(paddr_t paddr, struct addrspace* as)
 	spinlock_release(tlb_splock);
 
 
-	struct page_table_entry* temp = as->as_page_list;
-	KASSERT(temp!= NULL);
+    if(free_node == true)
+    {
+		struct page_table_entry* temp = as->as_page_list;
+		KASSERT(temp!= NULL);
 
-	struct page_table_entry* prev = NULL;
-	if(temp->paddr == page_index*PAGE_SIZE)
-	{
-		as->as_page_list = temp->next;	
-		kfree(temp);
-	
-	}
-	else
-	{
-		while(temp != NULL)
+		struct page_table_entry* prev = NULL;
+		if(temp->paddr == page_index*PAGE_SIZE)
 		{
-			if(temp->paddr == page_index*PAGE_SIZE)
-			{
-				KASSERT(prev != NULL);
-				prev->next = temp->next;
-				kfree(temp);
-				break;
-				
-			}
-			else
-			{
-				prev = temp;
-				temp = temp->next;
-			}
+			as->as_page_list = temp->next;	
+			kfree(temp);
 	
 		}
+		else
+		{
+			while(temp != NULL)
+			{
+				if(temp->paddr == page_index*PAGE_SIZE)
+				{
+					KASSERT(prev != NULL);
+					prev->next = temp->next;
+					kfree(temp);
+					break;
+				
+				}
+				else
+				{
+					prev = temp;
+					temp = temp->next;
+				}
+	
+			}	
+		}
 	}
-
 }
 
 void free_heap(intptr_t amount)
@@ -314,12 +316,19 @@ void free_heap(intptr_t amount)
 
 	struct page_table_entry* temp = as->as_page_list;
 	struct page_table_entry* next = NULL;
+	struct page_table_entry* prev = NULL;
 	while(temp != NULL)
 	{
 		next = temp->next;
 		intptr_t vaddr = temp->vaddr;
 		if(vaddr >= chunk_start && vaddr < heap_end)
-			free_user_page(temp->paddr,as);
+		{
+	 		free_user_page(temp->paddr,as,false);
+	 		prev->next = next;
+	 		kfree(temp);
+		}
+		else
+			prev = temp;
 
 		temp = next;
 	}
@@ -366,7 +375,7 @@ free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 			}
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
-			as_zero_region(page_index*PAGE_SIZE, 1);
+		//	as_zero_region(page_index*PAGE_SIZE, 1);
 
 			chunks--;
 			page_index++;
@@ -374,6 +383,7 @@ free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
 		}
 		
 	}
+
 	spinlock_release(cm_splock);
 
 }

@@ -100,7 +100,7 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr, bool, struct addrspace* as);
 
 paddr_t get_user_page(void);
-void free_user_page(paddr_t paddr, struct addrspace* as);
+void free_user_page(paddr_t paddr, struct addrspace* as, bool free_node);
 void free_heap(intptr_t amount);
 
 /*

@@ -2,8 +2,7 @@
 #include <addrspace.h>
 #include <mips/tlb.h>
 
-extern struct spinlock* sbrk_splock;
-extern struct spinlock* tlb_splock;
+//extern struct spinlock* sbrk_splock;
 
 int sys_sbrk(intptr_t amount, int* retval)
 {
@@ -13,11 +12,11 @@ int sys_sbrk(intptr_t amount, int* retval)
     return 0;
 #else
 
-	spinlock_acquire(sbrk_splock);
+//	spinlock_acquire(sbrk_splock);
 	struct addrspace* as = proc_getas();
 	if(as == NULL)
 	{
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return ENOMEM;
 	}
 	intptr_t heap_start = as->as_heap_start;
@@ -27,29 +26,30 @@ int sys_sbrk(intptr_t amount, int* retval)
 	if(amount == 0)
 	{
 		*retval = heap_end;
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return 0;
 	
 	}
 
 	unsigned int s = coremap_free_bytes();
 	(void)s;
-	unsigned int p  = amount;
+//	unsigned int p  = amount;
 	// should probably change this when swapping is implemented.
-	if(amount > 0 && p > coremap_free_bytes())
+/*	if(amount > 0 && p > coremap_free_bytes())
 	{
 		*retval = -1;
 		
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return ENOMEM;
 	}
+	*/
 
 	// unaligned , return inval.
 	if(amount > 0 && (amount!= ROUNDUP(amount,PAGE_SIZE)))
 	{
 		*retval = -1;
 
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return EINVAL;
 	
 	}
@@ -61,7 +61,7 @@ int sys_sbrk(intptr_t amount, int* retval)
 	{
 		*retval = -1;
 
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return ENOMEM;
 	
 	}
@@ -71,7 +71,7 @@ int sys_sbrk(intptr_t amount, int* retval)
 	{
 		*retval = -1;
 
-		spinlock_release(sbrk_splock);
+//		spinlock_release(sbrk_splock);
 		return EINVAL;
 	}
 
@@ -80,7 +80,7 @@ int sys_sbrk(intptr_t amount, int* retval)
 
 	*retval = heap_end;
 	as->as_heap_end += amount;
-	spinlock_release(sbrk_splock);
+//	spinlock_release(sbrk_splock);
 	return 0;
 #endif
 
