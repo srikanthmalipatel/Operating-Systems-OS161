@@ -227,7 +227,7 @@ paddr_t get_user_page()
 	return pa;
 }
 
-void free_user_page(paddr_t paddr, struct addrspace* as, bool free_node)
+void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node)
 {
 	KASSERT(as!= NULL);
 	
@@ -248,10 +248,17 @@ void free_user_page(paddr_t paddr, struct addrspace* as, bool free_node)
 
 
 	spinlock_acquire(tlb_splock);
-	int i, spl;
+	int spl;
+//	int i, spl;
 	spl = splhigh();
-	uint32_t elo,ehi;
-	for (i=0; i<NUM_TLB; i++) 
+//	uint32_t elo,ehi;
+	uint32_t p = vaddr;
+	int index = tlb_probe(p,0);
+
+	if(index >= 0)
+		tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
+	
+/*	for (i=0; i<NUM_TLB; i++) 
 	{
 		tlb_read(&ehi, &elo, i);
 		if (elo & TLBLO_VALID) 
@@ -259,11 +266,11 @@ void free_user_page(paddr_t paddr, struct addrspace* as, bool free_node)
 			elo &= PAGE_FRAME; // removing the other meta bits.
 			if(elo == page_index* PAGE_SIZE)
 			{
-				tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 				break;	
 			}
 		}
-	}
+	}*/
 
 	splx(spl);
 	spinlock_release(tlb_splock);
@@ -323,7 +330,7 @@ void free_heap(intptr_t amount)
 		intptr_t vaddr = temp->vaddr;
 		if(vaddr >= chunk_start && vaddr < heap_end)
 		{
-	 		free_user_page(temp->paddr,as,false);
+	 		free_user_page(temp->vaddr,temp->paddr,as,false);
 	 		prev->next = next;
 	 		kfree(temp);
 		}

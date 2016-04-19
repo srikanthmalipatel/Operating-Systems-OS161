@@ -126,6 +126,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		paddr_t paddr = get_user_page();
 		if(paddr == 0)
 			return ENOMEM;
+
 		memmove((void*)PADDR_TO_KVADDR(paddr),
 			(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
 			PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
@@ -167,7 +168,7 @@ as_destroy(struct addrspace *as)
 //		struct page_table_entry* p = (struct page_table_entry*)cur->node;
 
 	//	vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
-		free_user_page(cur->paddr,as, false);
+		free_user_page(cur->vaddr,cur->paddr,as, false);
 		cur = next;
 	
 	}
