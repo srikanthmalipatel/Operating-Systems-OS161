@@ -52,6 +52,7 @@ int sys_fork(struct trapframe* tf, int* retval) {
     //kprintf("[sys_fork] copying address space\n");
     result = as_copy(curproc->p_addrspace, &c_addrspace); 
     if (result) {
+    	as_destroy(c_addrspace);
         kfree(childtf);
         dealloc_pid(newproc);
         proc_destroy(newproc);
