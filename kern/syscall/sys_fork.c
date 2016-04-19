@@ -68,7 +68,7 @@ int sys_fork(struct trapframe* tf, int* retval) {
             enter_forked_process,
             (void *) childtf, (unsigned long) c_addrspace);
     if (result) {
-        kfree(c_addrspace);
+    //    as_destroy(c_addrspace);
         kfree(childtf);
         dealloc_pid(newproc);
         proc_destroy(newproc);

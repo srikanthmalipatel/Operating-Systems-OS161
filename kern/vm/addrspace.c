@@ -80,10 +80,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
-
 	struct as_region* r_old = old->as_region_list;
 	while(r_old != NULL)
 	{
@@ -113,16 +109,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			return ENOMEM;
 
 		p_new->vaddr = p_old->vaddr; // virtual addresses can be the same, no issue there.
-
-		// Now, how do i copy the actual page,
-		// dumbvm calls memmove. I can't do the same because we have to allcoate some physical memory here.
-		// But all physical memory allocations should happen at vm_fault.
-
-//		p_new->paddr = p_old->paddr; // this is wrong, they do not map to the same physical address..
-//		p_new->can_read = p_old->can_read;
-//		p_new->can_write = p_old->can_write;
-//		p_new->can_execute = p_old->can_execute;
-
+		
 		paddr_t paddr = get_user_page();
 		if(paddr == 0)
 			return ENOMEM;
@@ -155,22 +142,14 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
 	KASSERT(as != NULL);	
-	// need to free the individual pages as well, that's why this is not as straight forward
 	struct page_table_entry* cur = as->as_page_list;
 	struct page_table_entry* next = NULL;
 	while(cur != NULL)
 	{
 		next = cur->next;
-//		struct page_table_entry* p = (struct page_table_entry*)cur->node;
-
-	//	vaddr_t addr = PADDR_TO_KVADDR(cur->paddr);
 		free_user_page(cur->vaddr,cur->paddr,as, false);
 		cur = next;
-	
 	}
 	page_list_delete(&(as->as_page_list));
 	as->as_page_list = NULL;

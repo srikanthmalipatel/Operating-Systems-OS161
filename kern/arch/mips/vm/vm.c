@@ -442,16 +442,6 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-/*	if(faultaddress == USERSTACK - PAGE_SIZE)
-	{
-	    faultaddress &= PAGE_FRAME;
-		faultaddress &= PAGE_FRAME;	
-	}
-	*/
-	if(faultaddress == 0x41f000)
-	{
-		faultaddress = 0x41f000;
-	}
 	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
 		return EINVAL;
 
@@ -463,11 +453,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	if(as == NULL)
 		return EFAULT;
 	
-
-//	spinlock_acquire(tlb_splock);
 	//check if fault_address is valid.
 	faultaddress &= PAGE_FRAME;
-	struct as_region* temp = as->as_region_list;
 
 	bool is_valid = false;
 	int can_read = 0, can_write = 0, can_execute = 0;
@@ -503,12 +490,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 
 
+	struct as_region* temp = as->as_region_list;
 	while(is_valid == false && temp != NULL)
 	{
 		vaddr_t vaddr = temp->region_base;
 		size_t npages = temp->region_npages;
 	
-	 	// currently checking in regions provided by the ELF, should check in stack and heap also. HOW??
 		if(faultaddress >= vaddr  && faultaddress < vaddr + PAGE_SIZE*npages)
 		{
 			is_valid = true;
@@ -521,36 +508,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		temp = temp->next;
 	}
 
-/*	if(is_valid == false)
-	{
-		// check heap. heap_start is setup in as_define_region, heap_end is set in sbrk.
-		// each process contains one thread only, so we dont have to synchronize here.
-		if(faultaddress >= as->as_heap_start && faultaddress < as->as_heap_end)
-		{	
-			is_valid = true;
-			is_heap_page = true;
-			can_read = 1;
-			can_write = 1;
-			can_execute = 1; // really though?
-		}
-	}
-
+	//does not belong to any of the regions, not a valid address.
 	if(is_valid == false)
 	{
-		// check stack.  
-		if(faultaddress >= VM_STACKBOUND && faultaddress <= USERSTACK - PAGE_SIZE)
-		{	
-			is_valid = true;
-			is_stack_page = true;
-			can_read = 1;
-			can_write = 1;
-			can_execute = 1;
-		}
-	}
-*/
-	if(is_valid == false)
-	{
-		return EFAULT; // this is what dumbvm returns.
+		return EFAULT;
 	}
 
 	//if it reaches here, then the page is valid
@@ -559,36 +520,25 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		(faulttype == VM_FAULT_READONLY && can_write == 0) ||
 		(faulttype == VM_FAULT_READ && can_read == 0))
 	{
-		//invalid operation on this page. kill the process?
+		//invalid operation on this page. kill the process
 		return EFAULT;
 	}
 
-	// can read though. so simply fix the tlb entry. what will the hardware do now?
+	// can read though. so simply fix the tlb entry
 	if(faulttype == VM_FAULT_READONLY && can_write == 1)
 	{
-		// fix the dirty bit of the tlb entry.
 		uint32_t ehi, elo;	
 		int spl = splhigh();
-		int i;
 
-		spinlock_acquire(tlb_splock);
-		for (i=0; i<NUM_TLB; i++) 
-		{
-			tlb_read(&ehi, &elo, i);
-			if (elo & TLBLO_VALID) 
-			{
-				if(ehi == faultaddress)
-				{
-					elo = elo | TLBLO_DIRTY; // set the dirty bit.
-					tlb_write(ehi, elo, i);
-					splx(spl);
-					spinlock_release(tlb_splock);
-					return 0;
-				}
-			}
-		}
-		//this should not get hit at all.
-		KASSERT(i >= NUM_TLB);
+		int i = tlb_probe(faultaddress , 0);
+		KASSERT(i >= 0);
+		tlb_read(&ehi, &elo, i);
+	
+		elo = elo | TLBLO_DIRTY; // set the dirty bit.
+		tlb_write(ehi, elo, i);
+		splx(spl);
+		spinlock_release(tlb_splock);
+		return 0;
 	}
 
 	
@@ -596,7 +546,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	bool in_page_table = false;
 	paddr_t paddr = 0;
 	struct page_table_entry* page = as->as_page_list;
-//	unsigned int page_state = 0;
 
 	while(page != NULL)
 	{
@@ -605,24 +554,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			in_page_table = true;
 			paddr = page->paddr;
-		//	page_state = page->page_state;
-
-			// check if anything went horribly wrong.
-	//		KASSERT(can_read == page->can_read);
-		//	KASSERT(can_write == page->can_write);
-	//		KASSERT(can_execute == page->can_execute);
 			break;
 		}
 		page = page->next;
-	
 	}
 
 
-	if(in_page_table == true)// && page_state == MAPPED)
+	if(in_page_table == true)
 	{
 		//simple case. just update the tlb entry.
-		// I already have the tlb lock.
-
 		KASSERT(paddr != 0);
 
 		uint32_t elo,ehi;
@@ -649,7 +589,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			return 0;
 		}
 
-		//if i reach here, that means the tlb is full. what do i do now?.
 		// tlb  full. use random.
 		ehi = faultaddress;
 		elo = paddr | TLBLO_VALID;
@@ -662,34 +601,20 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		spinlock_release(tlb_splock);
 		return 0;
 	}
-/*
-	if(in_page_table == true && page_state == SWAPPED)
-	{
-		// swap the page back in.
-		// update page_table_entry.
-		// update the tlb.
-		// will probably see some issues with the spinlock. Should figure out how to do disk IO without acquiring a spinlock.
-	
-		return 0;	
-	
-	}*/
 
-	// Now to the fun part, TLB_FAULT and PAGE_FAULT
+   
+    // tlb fault and page fault.
     // create memory for this page	
-
 	paddr = get_user_page();
 	if(paddr == 0)	
 		return ENOMEM;
-		
+	
 	as_zero_region(paddr,1);
-	// create a page table entry
+
+	//create a page table entry for this page.
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 	p->vaddr = faultaddress;
 	p->paddr = paddr;
-//	p->page_state = MAPPED;
-//	p->can_read = can_read;
-//	p->can_write = can_write;
-//	p->can_execute = can_execute;
 
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
@@ -722,7 +647,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	//if i reach here, that means the tlb is full. what do i do now?.
 	// tlb  full. use random.
 	ehi = faultaddress;
 	elo = paddr | TLBLO_VALID;
