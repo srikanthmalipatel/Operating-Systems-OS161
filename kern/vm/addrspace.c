@@ -85,7 +85,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	{
 		struct as_region* r_new = (struct as_region*)kmalloc(sizeof(struct as_region));
 		if(r_new == NULL)
+		{
+			as_destroy(newas);
 			return ENOMEM;
+		}
 
 		r_new->region_base = r_old->region_base;
 		r_new->region_npages = r_old->region_npages;
@@ -95,25 +98,30 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
 		int ret = region_list_add_node(&newas->as_region_list,r_new); 
 		if(ret == -1)
+		{
+			as_destroy(newas);
 			return ENOMEM;
-		
+		}
 		r_old = r_old->next;
 	}
 
 	struct page_table_entry* p_old = old->as_page_list;
-//	spinlock_acquire(cm_splock);
 	while(p_old != NULL)
 	{
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 		if(p_new == NULL)
+		{
+			as_destroy(newas);
 			return ENOMEM;
-
-		p_new->vaddr = p_old->vaddr; // virtual addresses can be the same, no issue there.
+		}
+		p_new->vaddr = p_old->vaddr;
 		
 		paddr_t paddr = get_user_page();
 		if(paddr == 0)
+		{
+			as_destroy(newas);
 			return ENOMEM;
-
+		}
 		memmove((void*)PADDR_TO_KVADDR(paddr),
 			(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
 			PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
@@ -125,13 +133,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = page_list_add_node(&newas->as_page_list,p_new);
 		if(ret == -1)
 		{
-	//		spinlock_release(cm_splock);
+			as_destroy(newas);
 			return ENOMEM;
 		}
 		p_old = p_old->next;
 	
 	}
-//	spinlock_release(cm_splock);
 
 	newas->as_heap_start = old->as_heap_start;
 	newas->as_heap_end = old->as_heap_end;
