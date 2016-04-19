@@ -466,23 +466,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	int can_read = 0, can_write = 0, can_execute = 0;
 	bool is_stack_page = false, is_heap_page = false;
 
-	while(temp != NULL)
-	{
-		vaddr_t vaddr = temp->region_base;
-		size_t npages = temp->region_npages;
-	
-	 	// currently checking in regions provided by the ELF, should check in stack and heap also. HOW??
-		if(faultaddress >= vaddr  && faultaddress < vaddr + PAGE_SIZE*npages)
-		{
-			is_valid = true;
-			can_read = temp->can_read;
-			can_write = temp->can_write;
-			can_execute = temp->can_execute;
-			
-			break;
-		}
-		temp = temp->next;
-	}
 
 	if(is_valid == false)
 	{
@@ -511,6 +494,53 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 	}
 
+
+
+	while(is_valid == false && temp != NULL)
+	{
+		vaddr_t vaddr = temp->region_base;
+		size_t npages = temp->region_npages;
+	
+	 	// currently checking in regions provided by the ELF, should check in stack and heap also. HOW??
+		if(faultaddress >= vaddr  && faultaddress < vaddr + PAGE_SIZE*npages)
+		{
+			is_valid = true;
+			can_read = temp->can_read;
+			can_write = temp->can_write;
+			can_execute = temp->can_execute;
+			
+			break;
+		}
+		temp = temp->next;
+	}
+
+/*	if(is_valid == false)
+	{
+		// check heap. heap_start is setup in as_define_region, heap_end is set in sbrk.
+		// each process contains one thread only, so we dont have to synchronize here.
+		if(faultaddress >= as->as_heap_start && faultaddress < as->as_heap_end)
+		{	
+			is_valid = true;
+			is_heap_page = true;
+			can_read = 1;
+			can_write = 1;
+			can_execute = 1; // really though?
+		}
+	}
+
+	if(is_valid == false)
+	{
+		// check stack.  
+		if(faultaddress >= VM_STACKBOUND && faultaddress <= USERSTACK - PAGE_SIZE)
+		{	
+			is_valid = true;
+			is_stack_page = true;
+			can_read = 1;
+			can_write = 1;
+			can_execute = 1;
+		}
+	}
+*/
 	if(is_valid == false)
 	{
 		return EFAULT; // this is what dumbvm returns.
