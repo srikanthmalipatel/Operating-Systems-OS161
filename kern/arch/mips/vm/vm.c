@@ -143,9 +143,9 @@ dumbvm_can_sleep(void)
 
 static
 paddr_t
-getppages(unsigned long npages, bool is_user_page)
+getppages(unsigned long npages)//, bool is_user_page)
 {
-	(void)is_user_page;
+//	(void)is_user_page;
 	paddr_t addr = 0;
 	if(vm_initialized == false)
 	{
@@ -211,7 +211,7 @@ alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	pa = getppages(npages, false);
+	pa = getppages(npages);//, false);
 	if (pa==0) 
 	{
 		return 0;
@@ -222,7 +222,7 @@ alloc_kpages(unsigned npages)
 paddr_t get_user_page()
 {
 	paddr_t pa;
-	pa = getppages(1,true);
+	pa = getppages(1);//true);
 
 	return pa;
 }
@@ -336,13 +336,13 @@ void free_heap(intptr_t amount)
 }
 
 void
-free_kpages(vaddr_t addr, bool is_user_page, struct addrspace* as)
+free_kpages(vaddr_t addr)//r, bool is_user_page, struct addrspace* as)
 {
 	if(vm_initialized == false)
 		return;
 
-	if(is_user_page == true)
-		KASSERT(as != NULL);
+//	if(is_user_page == true)
+//		KASSERT(as != NULL);
  	
  	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
