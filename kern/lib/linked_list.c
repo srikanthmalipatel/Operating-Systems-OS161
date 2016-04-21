@@ -99,6 +99,9 @@ int page_list_add_node(struct page_table_entry **head, struct page_table_entry* 
 	}
 	else
 	{
+	/*	node_to_add->next = *head;
+		*head = node_to_add;*/
+		
 		struct page_table_entry* temp = *head;
 		while(temp->next != NULL)
 			temp = temp->next;

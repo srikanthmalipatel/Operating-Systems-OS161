@@ -85,7 +85,9 @@ main(void)
 			iters++;
 
 			__time(&time_now_s, &time_now_ns);
+			
 			if (time_now_s - start_time_s > TEST_DURATION && !did_print) {
+				tprintf("****** time now : %lld, start_time : %lld *********",time_now_s,start_time_s);
 				did_print = 1;
 				success(TEST161_SUCCESS, SECRET, "/testbin/forkbomb");
 			}
