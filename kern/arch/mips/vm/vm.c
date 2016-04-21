@@ -242,18 +242,17 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
-//	as_zero_region(page_index*PAGE_SIZE, 1);
 	
 	spinlock_release(cm_splock);
 
 
 	spinlock_acquire(tlb_splock);
-	int spl;
+//	int spl;
 //	int i, spl;
-	spl = splhigh();
+	int	spl = splhigh();
 //	uint32_t elo,ehi;
-	uint32_t p = vaddr;
-	int index = tlb_probe(p,0);
+	uint32_t v = vaddr;
+	int index = tlb_probe(v,0);
 
 	if(index >= 0)
 		tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
@@ -524,7 +523,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-	// can read though. so simply fix the tlb entry
+	// can write though. so simply fix the tlb entry
 	if(faulttype == VM_FAULT_READONLY && can_write == 1)
 	{
 		uint32_t ehi, elo;	
