@@ -70,7 +70,7 @@ static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
 uint32_t coremap_count = 0;
 uint32_t first_free_index = 0;
-void
+	void
 vm_bootstrap(void)
 {
 	/* Do nothing. */
@@ -79,8 +79,8 @@ vm_bootstrap(void)
 	paddr_t last = ram_getsize();
 	paddr_t first = ram_getfirstfree(); // cannot use firstpaddr and lastpaddr after this call.
 
-//	first = first & PAGE_FRAME; // get it aligned
-//	last  = last & PAGE_FRAME;
+	//	first = first & PAGE_FRAME; // get it aligned
+	//	last  = last & PAGE_FRAME;
 	kprintf("first free address : %d \n", first);
 
 	coremap = (struct coremap_entry*)PADDR_TO_KVADDR(first);
@@ -105,17 +105,17 @@ vm_bootstrap(void)
 		else
 			coremap[i].state = FREE;
 
-//		coremap[i].virtual_address = 0;
+		coremap[i].virtual_address = 0;
 		coremap[i].chunks = -1;
-//		coremap[i].as = NULL;
-	
+		coremap[i].as = NULL;
+
 	}
 
 	vm_initialized = true;
 	tlb_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(tlb_splock);
-//	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
-//	spinlock_init(sbrk_splock);
+	//	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
+	//	spinlock_init(sbrk_splock);
 }
 
 /*
@@ -127,25 +127,24 @@ vm_bootstrap(void)
  */
 
 /*
-static
-void
-dumbvm_can_sleep(void)
-{
-	if (CURCPU_EXISTS()) {
-		// must not hold spinlocks 
-		KASSERT(curcpu->c_spinlocks == 0);
+   static
+   void
+   dumbvm_can_sleep(void)
+   {
+   if (CURCPU_EXISTS()) {
+// must not hold spinlocks 
+KASSERT(curcpu->c_spinlocks == 0);
 
-		 must not be in an interrupt handler 
-		KASSERT(curthread->t_in_interrupt == 0);
-	}
+must not be in an interrupt handler 
+KASSERT(curthread->t_in_interrupt == 0);
 }
-*/
+}
+ */
 
 static
-paddr_t
-getppages(unsigned long npages)//, bool is_user_page)
+	paddr_t
+getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 {
-//	(void)is_user_page;
 	paddr_t addr = 0;
 	if(vm_initialized == false)
 	{
@@ -191,8 +190,18 @@ getppages(unsigned long npages)//, bool is_user_page)
 							// When called from kmalloc, the page can never be swapped. so it should be FIXED/PINNED.
 
 							// No. kernel threads can call kmalloc, set owner as current process. So can be dirty, just need to check if it is kernel to set FIXED.
-							coremap[k].state = FIXED;
-					
+							if(is_user_page == true)
+							{
+								coremap[k].state = DIRTY;
+								coremap[k].virtual_address = vaddr;
+								coremap[k].as = proc_getas();
+							}
+							else
+							{
+								coremap[k].state = FIXED;
+								coremap[k].virtual_address = 0;
+								coremap[k].as = NULL;
+							}
 						}
 						break;
 					}
@@ -200,18 +209,18 @@ getppages(unsigned long npages)//, bool is_user_page)
 			}
 			spinlock_release(cm_splock);
 		}
-			
+
 	}
 	return addr;
 }
 
 /* Allocate/free some kernel-space virtual pages */
-vaddr_t
+	vaddr_t
 alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	pa = getppages(npages);//, false);
+	pa = getppages(npages, false,0);
 	if (pa==0) 
 	{
 		return 0;
@@ -219,10 +228,10 @@ alloc_kpages(unsigned npages)
 	return PADDR_TO_KVADDR(pa);
 }
 
-paddr_t get_user_page()
+paddr_t get_user_page(vaddr_t vaddr)
 {
 	paddr_t pa;
-	pa = getppages(1);//true);
+	pa = getppages(1,true,vaddr);
 
 	return pa;
 }
@@ -230,53 +239,37 @@ paddr_t get_user_page()
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node)
 {
 	KASSERT(as!= NULL);
-	
+
 	uint32_t page_index = paddr/ PAGE_SIZE;
-	
+
 	KASSERT(page_index < coremap_count);
 	KASSERT(page_index >= first_free_index);
-	
-	KASSERT(coremap[page_index].state == FIXED);
+
+	KASSERT(coremap[page_index].state != FIXED);
+	KASSERT(coremap[page_index].state != FREE);
 
 	spinlock_acquire(cm_splock);
 
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
-	
+
 	spinlock_release(cm_splock);
 
 
 	spinlock_acquire(tlb_splock);
-//	int spl;
-//	int i, spl;
 	int	spl = splhigh();
-//	uint32_t elo,ehi;
 	uint32_t v = vaddr;
 	int index = tlb_probe(v,0);
 
 	if(index >= 0)
 		tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
-	
-/*	for (i=0; i<NUM_TLB; i++) 
-	{
-		tlb_read(&ehi, &elo, i);
-		if (elo & TLBLO_VALID) 
-		{
-			elo &= PAGE_FRAME; // removing the other meta bits.
-			if(elo == page_index* PAGE_SIZE)
-			{
-			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-				break;	
-			}
-		}
-	}*/
 
 	splx(spl);
 	spinlock_release(tlb_splock);
 
 
-    if(free_node == true)
-    {
+	if(free_node == true)
+	{
 		struct page_table_entry* temp = as->as_page_list;
 		KASSERT(temp!= NULL);
 
@@ -285,7 +278,7 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 		{
 			as->as_page_list = temp->next;	
 			kfree(temp);
-	
+
 		}
 		else
 		{
@@ -297,14 +290,14 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 					prev->next = temp->next;
 					kfree(temp);
 					break;
-				
+
 				}
 				else
 				{
 					prev = temp;
 					temp = temp->next;
 				}
-	
+
 			}	
 		}
 	}
@@ -329,9 +322,9 @@ void free_heap(intptr_t amount)
 		intptr_t vaddr = temp->vaddr;
 		if(vaddr >= chunk_start && vaddr < heap_end)
 		{
-	 		free_user_page(temp->vaddr,temp->paddr,as,false);
-	 		prev->next = next;
-	 		kfree(temp);
+			free_user_page(temp->vaddr,temp->paddr,as,false);
+			prev->next = next;
+			kfree(temp);
 		}
 		else
 			prev = temp;
@@ -341,23 +334,22 @@ void free_heap(intptr_t amount)
 
 }
 
-void
-free_kpages(vaddr_t addr)//r, bool is_user_page, struct addrspace* as)
+	void
+free_kpages(vaddr_t addr)
 {
 	if(vm_initialized == false)
 		return;
 
-//	if(is_user_page == true)
-//		KASSERT(as != NULL);
- 	
- 	paddr_t paddr = KVADDR_TO_PADDR(addr);	
+
+	paddr_t paddr = KVADDR_TO_PADDR(addr);	
 	uint32_t page_index = paddr/ PAGE_SIZE;
 
-	
+
 	if(page_index > coremap_count)
 		return;
 
 	spinlock_acquire(cm_splock);
+	KASSERT(coremap[page_index].state != FREE);
 
 	//Should we allow the user to do this !!.. IMPORTANT - ASK TA.
 	//km2 and km5 are asking me to free memory that they have not called to be allocated. Is this fine ??
@@ -367,27 +359,21 @@ free_kpages(vaddr_t addr)//r, bool is_user_page, struct addrspace* as)
 		kprintf("*** freeing a page which was allocated with ram_stealmem() *****");
 		coremap[page_index].state = FREE;
 		coremap[page_index].chunks = -1;
-	
+
 	}
 	else
 	{
 		int chunks = coremap[page_index].chunks;
 		while(chunks > 0 && (page_index >= first_free_index) && (page_index < coremap_count))
 		{
-			if(coremap[page_index].state != FIXED)
-			{
-				kprintf("*** freeing a non dirty page **** \n");
-			
-			}
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
-		//	as_zero_region(page_index*PAGE_SIZE, 1);
 
 			chunks--;
 			page_index++;
-			
+
 		}
-		
+
 	}
 
 	spinlock_release(cm_splock);
@@ -413,32 +399,32 @@ coremap_used_bytes() {
 
 unsigned int coremap_free_bytes()
 {
-   unsigned int free = 0;
-   
-   spinlock_acquire(cm_splock);
-   for(uint32_t i = 0; i < coremap_count; i++)
-   {
-	  if(coremap[i].state == FREE)
-		  free++;	
-   }
-   spinlock_release(cm_splock);
-   return free*PAGE_SIZE;
+	unsigned int free = 0;
+
+	spinlock_acquire(cm_splock);
+	for(uint32_t i = 0; i < coremap_count; i++)
+	{
+		if(coremap[i].state == FREE)
+			free++;	
+	}
+	spinlock_release(cm_splock);
+	return free*PAGE_SIZE;
 }
 
-void
+	void
 vm_tlbshootdown_all(void)
 {
 	panic("dumbvm tried to do tlb shootdown?!\n");
 }
 
-void
+	void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
 	panic("dumbvm tried to do tlb shootdown?!\n");
 }
 
-int
+	int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
 	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
@@ -446,12 +432,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(curproc == NULL)
 		return EFAULT;
-	
+
 	struct addrspace *as = NULL;
 	as = proc_getas();
 	if(as == NULL)
 		return EFAULT;
-	
+
 	//check if fault_address is valid.
 	faultaddress &= PAGE_FRAME;
 
@@ -489,19 +475,20 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 
 
+	// check the code and data regions
 	struct as_region* temp = as->as_region_list;
 	while(is_valid == false && temp != NULL)
 	{
 		vaddr_t vaddr = temp->region_base;
 		size_t npages = temp->region_npages;
-	
+
 		if(faultaddress >= vaddr  && faultaddress < vaddr + PAGE_SIZE*npages)
 		{
 			is_valid = true;
 			can_read = temp->can_read;
 			can_write = temp->can_write;
 			can_execute = temp->can_execute;
-			
+
 			break;
 		}
 		temp = temp->next;
@@ -516,8 +503,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	//if it reaches here, then the page is valid
 	//check if permissions are valid
 	if((faulttype == VM_FAULT_WRITE && can_write == 0) ||
-		(faulttype == VM_FAULT_READONLY && can_write == 0) ||
-		(faulttype == VM_FAULT_READ && can_read == 0))
+			(faulttype == VM_FAULT_READONLY && can_write == 0) ||
+			(faulttype == VM_FAULT_READ && can_read == 0))
 	{
 		//invalid operation on this page. kill the process
 		return EFAULT;
@@ -532,7 +519,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		int i = tlb_probe(faultaddress , 0);
 		KASSERT(i >= 0);
 		tlb_read(&ehi, &elo, i);
-	
+
 		elo = elo | TLBLO_DIRTY; // set the dirty bit.
 		tlb_write(ehi, elo, i);
 		splx(spl);
@@ -540,9 +527,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	
+
 	// check if it is a page fault.
 	bool in_page_table = false;
+	bool is_swapped = false;
 	paddr_t paddr = 0;
 	struct page_table_entry* page = as->as_page_list;
 
@@ -553,6 +541,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			in_page_table = true;
 			paddr = page->paddr;
+			is_swapped = page->is_swapped;
 			break;
 		}
 		page = page->next;
@@ -562,64 +551,77 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	if(in_page_table == true)
 	{
 		//simple case. just update the tlb entry.
-		KASSERT(paddr != 0);
 
-		uint32_t elo,ehi;
-		int	spl = splhigh();
-
-		spinlock_acquire(tlb_splock);
-		for (int i=0; i < NUM_TLB; i++) 
+		if(is_swapped == false)
 		{
-			tlb_read(&ehi, &elo, i);
-			if (elo & TLBLO_VALID) 
+			//direct case, just update the tlb entry.
+			KASSERT(paddr != 0);
+
+			uint32_t elo,ehi;
+			int	spl = splhigh();
+
+			spinlock_acquire(tlb_splock);
+			for (int i=0; i < NUM_TLB; i++) 
 			{
-				continue;
+				tlb_read(&ehi, &elo, i);
+				if (elo & TLBLO_VALID) 
+				{
+					continue;
+				}
+
+				ehi = faultaddress;
+				elo = paddr | TLBLO_VALID;
+
+				if(can_write == 1)
+					elo = elo | TLBLO_DIRTY;
+
+				tlb_write(ehi, elo, i);
+				splx(spl);
+				spinlock_release(tlb_splock);
+				return 0;
 			}
-			
+
+			// tlb  full. use random.
 			ehi = faultaddress;
 			elo = paddr | TLBLO_VALID;
-		
+
 			if(can_write == 1)
 				elo = elo | TLBLO_DIRTY;
 
-			tlb_write(ehi, elo, i);
+			tlb_random(ehi, elo);
 			splx(spl);
 			spinlock_release(tlb_splock);
 			return 0;
 		}
+		else
+		{
+			// this page is swapped out. Bring it back into memory
+			// update the page table with the new paddr and is_swapped = false
+			// update the tlb entry.
 
-		// tlb  full. use random.
-		ehi = faultaddress;
-		elo = paddr | TLBLO_VALID;
-
-		if(can_write == 1)
-			elo = elo | TLBLO_DIRTY;
-
-		tlb_random(ehi, elo);
-		splx(spl);
-		spinlock_release(tlb_splock);
-		return 0;
+		}
 	}
 
-   
-    // tlb fault and page fault.
-    // create memory for this page	
-	paddr = get_user_page();
+
+	// tlb fault and page fault.
+	// create memory for this page	
+	paddr = get_user_page(faultaddress);
 	if(paddr == 0)	
 		return ENOMEM;
-	
+
 	as_zero_region(paddr,1);
 
 	//create a page table entry for this page.
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 	p->vaddr = faultaddress;
 	p->paddr = paddr;
+	p->is_swapped = false;
 
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
 	if(i == -1)
 		return ENOMEM;
-	
+
 	// now add this to the TLB.
 	uint32_t elo,ehi;
 	int spl = splhigh();
@@ -633,10 +635,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			continue;
 		}
-			
+
 		ehi = faultaddress;
 		elo = paddr | TLBLO_VALID;
-		
+
 		if(can_write == 1)
 			elo = elo | TLBLO_DIRTY;
 

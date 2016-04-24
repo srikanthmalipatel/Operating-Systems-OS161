@@ -75,10 +75,10 @@ typedef enum state
 #define CLEAN 3
  struct coremap_entry
  {
-//	vaddr_t virtual_address;
+	vaddr_t virtual_address;
 	unsigned int state : 3;
     unsigned int chunks : 7;
-//	struct addrspace* as;
+	struct addrspace* as;
 
  };
 
@@ -99,7 +99,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);//, bool, struct addrspace* as);
 
-paddr_t get_user_page(void);
+paddr_t get_user_page(vaddr_t);
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node);
 void free_heap(intptr_t amount);
 
