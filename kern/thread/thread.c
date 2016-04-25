@@ -1250,6 +1250,21 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 	spinlock_release(&target->c_ipi_lock);
 }
 
+void ipi_tlbshootdown_broadcast(const struct tlbshootdown* mapping)
+{
+
+	unsigned i;
+	struct cpu *c;
+
+	for (i=0; i < cpuarray_num(&allcpus); i++) 
+	{
+			c = cpuarray_get(&allcpus, i);
+			ipi_tlbshootdown(c,mapping);
+	}
+	
+
+}
+
 void
 interprocessor_interrupt(void)
 {

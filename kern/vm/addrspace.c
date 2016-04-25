@@ -127,8 +127,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			return ENOMEM;
 		}
 		p_new->vaddr = p_old->vaddr;
-		p_new->is_swapped = p_old->is_swapped; // FOR NOW. change this later.
-		
+		p_new->page_state = p_old->page_state; // FOR NOW. change this later.
+		p_new->swap_pos = -1;
+
 		paddr_t paddr = get_user_page(p_new->vaddr);
 		if(paddr == 0)
 		{

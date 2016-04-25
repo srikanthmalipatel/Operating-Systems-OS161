@@ -96,12 +96,14 @@ struct as_region
 
 #define MAPPED 0
 #define SWAPPED 1
+#define SWAPPING 2
 struct page_table_entry
 {
 	vaddr_t vaddr;
 	paddr_t paddr;
-	unsigned int is_swapped:1;
+	unsigned int page_state:2;
 	struct page_table_entry* next;
+	int swap_pos;
 //	int can_read ;
 //	int can_write ;
 //	int can_execute ;
