@@ -77,6 +77,7 @@ struct addrspace {
 //        vaddr_t as_stack_end;
         vaddr_t as_heap_start;
         vaddr_t as_heap_end;
+        struct spinlock* as_splock;
         
 #endif
 };

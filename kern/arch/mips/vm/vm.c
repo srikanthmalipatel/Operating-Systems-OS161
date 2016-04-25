@@ -62,6 +62,9 @@ static bool  vm_initialized = false;
 /*
  * Wrap ram_stealmem in a spinlock.
  */
+
+struct swapmap_entry swapmap[2000];
+struct spinlock* swapmap_splock = NULL;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock* cm_splock = NULL;
 struct spinlock* tlb_splock = NULL;
@@ -114,6 +117,9 @@ vm_bootstrap(void)
 	vm_initialized = true;
 	tlb_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(tlb_splock);
+
+	swapmap_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
+	spinlock_init(swapmap_splock);
 	//	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	//	spinlock_init(sbrk_splock);
 }
@@ -141,6 +147,22 @@ KASSERT(curthread->t_in_interrupt == 0);
 }
  */
 
+/*static uint32_t get_swap_victim_index()
+{
+	paddr_t dirty_address = 0;
+
+	for(uint32_t i = first_free_index ; i < coremap_count; i++)
+	{
+		if(coremap[i].state == CLEAN)
+			return i;
+		
+		if(dirty_address == 0 && coremap[i].state == DIRTY)
+			dirty_address = i;
+	}
+
+	return dirty_address;
+}
+*/
 static
 	paddr_t
 getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
@@ -211,8 +233,45 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 		}
 
 	}
+	if(addr == 0)
+	{
+		// no free page, need to swap out a user page
+		// acquire coremap spinlock
+	/*	spinlock_acquire(cm_splock);
+		// select a candidate and mark it as victim
+		uint32_t victim = get_swap_victim_index();
+		KASSERT(victim != 0);
+		coremap[victim].state = VICTIM;
+	
+		// shootdown tlb entry for this victim, also we need to do something to the page table entry to mark it from being used.
+		vaddr_t victim_vaddr = coremap[victim].virtual_address;
+		struct addrspace* victim_as = coremap[victim].as;
+		(void)victim_as;
+
+		spinlock_acquire(tlb_splock);
+		int	spl = splhigh();
+		int index = tlb_probe(victim_vaddr,0);
+
+		if(index >= 0)
+			tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
+
+		splx(spl);
+		spinlock_release(tlb_splock);
+
+
+
+		// mark the page as being swapped out and then wait in a loop  or call thread_yield in vm_fault?
+		// prevent other processes from using the victim
+		// get a free position in the swap map and mark it
+		// release the cm_spinlock
+		// do the actual swap out to the position.
+		// update the page table entry of the owner of the victim,i.e., tell it that this page has been swapped out.
+	*/
+	}
 	return addr;
 }
+
+
 
 /* Allocate/free some kernel-space virtual pages */
 	vaddr_t
@@ -309,6 +368,7 @@ void free_heap(intptr_t amount)
 	KASSERT(as!= NULL);
 	KASSERT(amount < 0);
 
+	spinlock_acquire(as->as_splock);
 	intptr_t heap_end = as->as_heap_end;
 
 	intptr_t chunk_start = as->as_heap_end + amount; //amount is -ve.
@@ -331,10 +391,11 @@ void free_heap(intptr_t amount)
 
 		temp = next;
 	}
+	spinlock_release(as->as_splock);
 
 }
 
-	void
+void
 free_kpages(vaddr_t addr)
 {
 	if(vm_initialized == false)
@@ -411,20 +472,20 @@ unsigned int coremap_free_bytes()
 	return free*PAGE_SIZE;
 }
 
-	void
+void
 vm_tlbshootdown_all(void)
 {
 	panic("dumbvm tried to do tlb shootdown?!\n");
 }
 
-	void
+void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
 	panic("dumbvm tried to do tlb shootdown?!\n");
 }
 
-	int
+int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
 	if(faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE && faulttype != VM_FAULT_READONLY)
@@ -534,6 +595,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	paddr_t paddr = 0;
 	struct page_table_entry* page = as->as_page_list;
 
+	spinlock_acquire(as->as_splock);
 	while(page != NULL)
 	{
 
@@ -578,6 +640,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				tlb_write(ehi, elo, i);
 				splx(spl);
 				spinlock_release(tlb_splock);
+				spinlock_release(as->as_splock);
 				return 0;
 			}
 
@@ -591,6 +654,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			tlb_random(ehi, elo);
 			splx(spl);
 			spinlock_release(tlb_splock);
+			spinlock_release(as->as_splock);
 			return 0;
 		}
 		else
@@ -606,9 +670,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// tlb fault and page fault.
 	// create memory for this page	
 	paddr = get_user_page(faultaddress);
-	if(paddr == 0)	
+	if(paddr == 0)
+	{
+		spinlock_release(as->as_splock);
 		return ENOMEM;
-
+	}
 	as_zero_region(paddr,1);
 
 	//create a page table entry for this page.
@@ -619,6 +685,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
+	spinlock_release(as->as_splock);
 	if(i == -1)
 		return ENOMEM;
 

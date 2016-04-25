@@ -73,6 +73,7 @@ typedef enum state
 #define FIXED 1
 #define DIRTY 2
 #define CLEAN 3
+#define VICTIM 4
  struct coremap_entry
  {
 	vaddr_t virtual_address;
@@ -80,6 +81,13 @@ typedef enum state
     unsigned int chunks : 7;
 	struct addrspace* as;
 
+ };
+
+ struct swapmap_entry
+ {
+ 	vaddr_t vaddr;
+ 	struct addrspace* as;
+ 
  };
 
 struct addrspace* as;

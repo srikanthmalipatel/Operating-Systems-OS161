@@ -67,6 +67,8 @@ as_create(void)
 //	as->as_stack_end = 0;
 	as->as_heap_start = 0;
 	as->as_heap_end = 0;
+	as->as_splock = kmalloc(sizeof(struct spinlock));
+	spinlock_init(as->as_splock);
 	return as;
 }
 
@@ -80,12 +82,16 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
+	spinlock_acquire(old->as_splock);
+	spinlock_acquire(newas->as_splock);
 	struct as_region* r_old = old->as_region_list;
 	while(r_old != NULL)
 	{
 		struct as_region* r_new = (struct as_region*)kmalloc(sizeof(struct as_region));
 		if(r_new == NULL)
 		{
+			spinlock_release(old->as_splock);
+			spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -99,6 +105,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = region_list_add_node(&newas->as_region_list,r_new); 
 		if(ret == -1)
 		{
+			spinlock_release(old->as_splock);
+			spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -111,7 +119,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 		if(p_new == NULL)
 		{
+			
+			spinlock_release(old->as_splock);
+			spinlock_release(newas->as_splock);
 			as_destroy(newas);
+			
 			return ENOMEM;
 		}
 		p_new->vaddr = p_old->vaddr;
@@ -120,6 +132,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		paddr_t paddr = get_user_page(p_new->vaddr);
 		if(paddr == 0)
 		{
+			spinlock_release(old->as_splock);
+			spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -134,6 +148,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = page_list_add_node(&newas->as_page_list,p_new);
 		if(ret == -1)
 		{
+			spinlock_release(old->as_splock);
+			spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -144,6 +160,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	newas->as_heap_start = old->as_heap_start;
 	newas->as_heap_end = old->as_heap_end;
 	*ret = newas;
+
+	spinlock_release(old->as_splock);
+	spinlock_release(newas->as_splock);
 	return 0;
 }
 
@@ -166,6 +185,8 @@ as_destroy(struct addrspace *as)
 	//this is straight forward though.
 	region_list_delete(&(as->as_region_list));
 	as->as_region_list = NULL;
+	spinlock_cleanup(as->as_splock);
+	kfree(as->as_splock);
 	kfree(as);
 }
 
