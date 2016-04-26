@@ -35,6 +35,7 @@
 #include <proc.h>
 #include <spl.h>
 #include <mips/tlb.h>
+#include <thread.h>
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
  * assignment, this file is not compiled or linked or in any way
@@ -173,10 +174,21 @@ as_destroy(struct addrspace *as)
 	KASSERT(as != NULL);	
 	struct page_table_entry* cur = as->as_page_list;
 	struct page_table_entry* next = NULL;
+	spinlock_acquire(as->as_splock);
 	while(cur != NULL)
 	{
 		next = cur->next;
-		free_user_page(cur->vaddr,cur->paddr,as, false);
+		KASSERT(cur->page_state == MAPPED);
+		while(cur->page_state == SWAPPING)
+		{
+			thread_yield();
+		}
+
+		bool is_swapped = false;
+		if(cur->page_state == SWAPPED)
+			is_swapped = true;
+			
+		free_user_page(cur->vaddr,cur->paddr,as, false, is_swapped, cur->swap_pos);
 		kfree(cur);
 		cur = next;
 	}
@@ -186,6 +198,7 @@ as_destroy(struct addrspace *as)
 	//this is straight forward though.
 	region_list_delete(&(as->as_region_list));
 	as->as_region_list = NULL;
+	spinlock_release(as->as_splock);
 	spinlock_cleanup(as->as_splock);
 	kfree(as->as_splock);
 	kfree(as);

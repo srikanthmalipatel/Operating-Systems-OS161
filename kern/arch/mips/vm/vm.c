@@ -38,6 +38,7 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <thread.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -151,7 +152,7 @@ vm_bootstrap(void)
  
 
 // CHANGE THIS TO SUPPORT MULTIPLE PAGE REQUESTS
-static uint32_t get_swap_victim_index(int npages)
+static uint32_t get_swap_victim_index(unsigned long npages)
 {
 	if(npages == 1)
 	{
@@ -174,13 +175,46 @@ static uint32_t get_swap_victim_index(int npages)
 		// it needs contiguous pages.
 		// one option is give it any random sequence of n contiguous pages (user pages and free)
 		// another option is to iterate and find out an optimal sequence which requires the least number of swap outs.
-	
-	
-	
+		
+		// this is the worst possible solution. should optimize this function
+		for(uint32_t i = first_free_index; i < coremap_count; i++)
+		{
+			if((coremap[i].is_victim == false) && (coremap[i].state == FREE || coremap[i].state == CLEAN || coremap[i].state == DIRTY))
+			{
+				unsigned long p = 0;
+				uint32_t j = i + 1;
+				while((p < (npages - 1)) && j < coremap_count)
+				{
+					if((coremap[j].state == FREE || coremap[j].state == CLEAN || coremap[j].state == DIRTY)&&(coremap[j].is_victim == false))
+					{
+						p++;
+						j++;
+					}
+					else
+					{
+						break;
+					}
+				}
+				if(p == npages - 1)
+				{
+					return i;
+				}
+			
+			}
+			
+		}
 	
 	}
 
 	return -1;
+}
+static int write_to_disk(uint32_t page_index, int swap_pos)
+{
+	(void)page_index;
+	(void)swap_pos;
+
+
+	return 0;
 }
 
 static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
@@ -252,7 +286,8 @@ static int swap_out(uint32_t victim)
 		// check if we can sleep
 		vm_can_sleep();
 		// do the actual swap out to the position.
-		
+		int err = write_to_disk(victim, pos);
+		KASSERT(err == 0);
 
 
 		// update the page table entry of the owner of the victim,i.e., tell it that this page has been swapped out.
@@ -314,12 +349,14 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 			{
 				if(coremap[i].state == FREE)
 				{
+					KASSERT(coremap[i].is_victim == false);
 					unsigned long p = 0;
 					uint32_t j = i + 1;
 					while((p < (npages - 1)) && j < coremap_count)
 					{
 						if(coremap[j].state == FREE)
 						{
+							KASSERT(coremap[j].is_victim == false);
 							p++;
 							j++;
 						}
@@ -451,7 +488,7 @@ paddr_t get_user_page(vaddr_t vaddr)
 	return pa;
 }
 
-void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node)
+void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos)
 {
 	KASSERT(as!= NULL);
 
@@ -464,8 +501,21 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 	KASSERT(coremap[page_index].state != FREE);
 	KASSERT(coremap[page_index].is_victim == false);
 
-	spinlock_acquire(cm_splock);
 
+	if(is_swapped == true)
+	{
+		spinlock_acquire(sm_splock);
+		KASSERT(swap_map[swap_pos].vaddr == vaddr);
+		KASSERT(swap_map[swap_pos].as == as);
+
+		swap_map[swap_pos].vaddr = 0;
+		swap_map[swap_pos].as = NULL;
+		spinlock_release(sm_splock);
+		return;
+	
+	}
+
+	spinlock_acquire(cm_splock);
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
 	coremap[page_index].is_victim = false;
@@ -533,7 +583,17 @@ void free_heap(intptr_t amount)
 		intptr_t vaddr = temp->vaddr;
 		if(vaddr >= chunk_start && vaddr < heap_end)
 		{
-			free_user_page(temp->vaddr,temp->paddr,as,false);
+			KASSERT(temp->page_state == MAPPED);
+			while(temp->page_state == SWAPPING)
+			{
+				thread_yield();
+			}
+
+			bool is_swapped = false;
+			if(temp->page_state == SWAPPED)
+				is_swapped = true;
+				
+			free_user_page(temp->vaddr,temp->paddr,as,false, is_swapped, temp->swap_pos);
 			prev->next = next;
 			kfree(temp);
 		}
