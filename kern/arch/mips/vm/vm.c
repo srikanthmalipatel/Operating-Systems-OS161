@@ -39,6 +39,9 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <thread.h>
+#include <vfs.h>
+#include <uio.h>
+#include <kern/fcntl.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -66,6 +69,8 @@ static bool  vm_initialized = false;
 #define SWAP_MAX 2000
 struct swapmap_entry swap_map[SWAP_MAX];
 struct spinlock* sm_splock = NULL;
+struct vnode* swap_disk;
+bool swap_disk_opened = false;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock* cm_splock = NULL;
 struct spinlock* tlb_splock = NULL;
@@ -212,7 +217,31 @@ static int write_to_disk(uint32_t page_index, int swap_pos)
 {
 	(void)page_index;
 	(void)swap_pos;
+	if(swap_disk_opened == false)
+	{
+		kprintf("swap disk init code \n");
+		char swap_disk_name[] = "lhd0raw";
+		int result = vfs_open(swap_disk_name,0,O_RDWR,&swap_disk);
+		if(result)
+		{
+		  // what do I do now.
+		  kprintf("cannot open swap disk\n");
+		  return -1;
+		}
+		swap_disk_opened = true;
+	
+	}
 
+	struct iovec iov;
+	struct uio uio;
+	vaddr_t vaddr = PADDR_TO_KVADDR(page_index*PAGE_SIZE);
+	
+	uio_kinit(&iov,&uio,(void*)vaddr,PAGE_SIZE,swap_pos*PAGE_SIZE,UIO_WRITE);
+	
+	vm_can_sleep();
+	
+	int result = VOP_WRITE(swap_disk,&uio);
+	KASSERT(result == 0);
 
 	return 0;
 }
@@ -236,6 +265,44 @@ static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 	}
 	spinlock_release(sm_splock);
 	return -1;
+}
+
+static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
+{
+	spinlock_acquire(sm_splock);
+	int swap_pos = 0;
+	for(swap_pos = 0; swap_pos < SWAP_MAX; swap_pos++)
+	{
+		if(swap_map[swap_pos].vaddr == vaddr && swap_map[swap_pos].as == as)
+			break;
+	}
+	spinlock_release(sm_splock);
+
+	KASSERT(swap_pos<SWAP_MAX);
+
+	paddr_t paddr = get_user_page(vaddr);
+	KASSERT(paddr != 0);
+
+	KASSERT(swap_disk_opened == true);
+
+	struct iovec iov;
+	struct uio uio;
+	vaddr_t virtual_address = PADDR_TO_KVADDR(paddr);
+
+	uio_kinit(&iov,&uio,(void*)virtual_address,PAGE_SIZE,swap_pos*PAGE_SIZE,UIO_READ);
+	
+	vm_can_sleep();
+	
+	int result = VOP_READ(swap_disk,&uio);
+	KASSERT(result == 0);
+
+	spinlock_acquire(sm_splock);
+	swap_map[swap_pos].as = NULL;
+	swap_map[swap_pos].vaddr = 0;
+	spinlock_release(sm_splock);
+
+	return paddr;
+
 }
 
 static int swap_out(uint32_t victim)
@@ -816,7 +883,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// check if it is a page fault.
 	bool in_page_table = false;
-	bool is_swapped = false;
+	uint32_t page_state = false;
 	paddr_t paddr = 0;
 	struct page_table_entry* page = as->as_page_list;
 
@@ -828,8 +895,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			in_page_table = true;
 			paddr = page->paddr;
-			if(page->page_state == SWAPPED)
-				is_swapped = true;
+			page_state = page->page_state;
 			break;
 		}
 		page = page->next;
@@ -840,7 +906,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		//simple case. just update the tlb entry.
 
-		if(is_swapped == false)
+		KASSERT(page_state != SWAPPING);
+
+		if(page_state == MAPPED)
 		{
 			//direct case, just update the tlb entry.
 			KASSERT(paddr != 0);
@@ -883,11 +951,57 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			spinlock_release(as->as_splock);
 			return 0;
 		}
-		else
+		else if(page_state == SWAPPED)
 		{
+			spinlock_release(as->as_splock);
 			// this page is swapped out. Bring it back into memory
-			// update the page table with the new paddr and is_swapped = false
+			vm_can_sleep();
+			paddr_t paddr = swap_in(faultaddress,as);
+			spinlock_acquire(as->as_splock);
+
+			// update page_table_entry and page_state
+			page->paddr = paddr;
+			page->page_state = MAPPED;
+
 			// update the tlb entry.
+
+			uint32_t elo,ehi;
+			int	spl = splhigh();
+
+			spinlock_acquire(tlb_splock);
+			for (int i=0; i < NUM_TLB; i++) 
+			{
+				tlb_read(&ehi, &elo, i);
+				if (elo & TLBLO_VALID) 
+				{
+					continue;
+				}
+
+				ehi = faultaddress;
+				elo = paddr | TLBLO_VALID;
+
+				if(can_write == 1)
+					elo = elo | TLBLO_DIRTY;
+
+				tlb_write(ehi, elo, i);
+				splx(spl);
+				spinlock_release(tlb_splock);
+				spinlock_release(as->as_splock);
+				return 0;
+			}
+
+			// tlb  full. use random.
+			ehi = faultaddress;
+			elo = paddr | TLBLO_VALID;
+
+			if(can_write == 1)
+				elo = elo | TLBLO_DIRTY;
+
+			tlb_random(ehi, elo);
+			splx(spl);
+			spinlock_release(tlb_splock);
+			spinlock_release(as->as_splock);
+			return 0;
 
 		}
 	}
