@@ -131,7 +131,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		p_new->page_state = p_old->page_state; // FOR NOW. change this later.
 		p_new->swap_pos = -1;
 
-		paddr_t paddr = get_user_page(p_new->vaddr);
+		paddr_t paddr = get_user_page(p_new->vaddr, false);
 		if(paddr == 0)
 		{
 			spinlock_release(old->as_splock);

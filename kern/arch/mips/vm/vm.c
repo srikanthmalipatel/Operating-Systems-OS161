@@ -280,8 +280,9 @@ static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
 
 	KASSERT(swap_pos<SWAP_MAX);
 
-	paddr_t paddr = get_user_page(vaddr);
+	paddr_t paddr = get_user_page(vaddr,true);
 	KASSERT(paddr != 0);
+	
 
 	KASSERT(swap_disk_opened == true);
 
@@ -296,11 +297,11 @@ static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
 	int result = VOP_READ(swap_disk,&uio);
 	KASSERT(result == 0);
 
-	spinlock_acquire(sm_splock);
+/*	spinlock_acquire(sm_splock);
 	swap_map[swap_pos].as = NULL;
 	swap_map[swap_pos].vaddr = 0;
 	spinlock_release(sm_splock);
-
+*/
 	return paddr;
 
 }
@@ -393,7 +394,7 @@ static int swap_out(uint32_t victim)
 
 static
 	paddr_t
-getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
+getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_in)
 {
 	paddr_t addr = 0;
 	if(vm_initialized == false)
@@ -444,7 +445,10 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 							// No. kernel threads can call kmalloc, set owner as current process. So can be dirty, just need to check if it is kernel to set FIXED.
 							if(is_user_page == true)
 							{
-								coremap[k].state = DIRTY;
+								if(is_swap_in == true)
+									coremap[k].state = CLEAN;
+								else
+									coremap[k].state = DIRTY;
 								coremap[k].virtual_address = vaddr;
 								coremap[k].as = proc_getas();
 								coremap[k].is_victim = false;
@@ -539,7 +543,7 @@ alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	pa = getppages(npages, false,0);
+	pa = getppages(npages, false,0,false);
 	if (pa==0) 
 	{
 		return 0;
@@ -547,14 +551,47 @@ alloc_kpages(unsigned npages)
 	return PADDR_TO_KVADDR(pa);
 }
 
-paddr_t get_user_page(vaddr_t vaddr)
+paddr_t get_user_page(vaddr_t vaddr, bool is_swap_in)
 {
 	paddr_t pa;
-	pa = getppages(1,true,vaddr);
+	pa = getppages(1,true,vaddr,is_swap_in);
 
 	return pa;
 }
 
+static void set_dirty(paddr_t paddr)
+{
+	spinlock_acquire(cm_splock);
+
+	int index = paddr/PAGE_SIZE;
+	KASSERT(coremap[index].as == proc_getas());
+
+	KASSERT(coremap[index].state == CLEAN);
+	coremap[index].state = DIRTY;
+
+	spinlock_release(cm_splock);
+	return;
+
+}
+
+static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as)
+{
+	spinlock_acquire(sm_splock);
+	int i = 0;
+	for(i = 0; i < SWAP_MAX; i++)
+	{
+		if(swap_map[i].vaddr == vaddr && swap_map[i].as == as)
+		{
+			swap_map[i].vaddr = 0;
+			swap_map[i].as = NULL;
+		
+		}
+	
+	}
+
+	KASSERT(i < SWAP_MAX);
+
+}
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos)
 {
 	KASSERT(as!= NULL);
@@ -866,6 +903,25 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// can write though. so simply fix the tlb entry
 	if(faulttype == VM_FAULT_READONLY && can_write == 1)
 	{
+		//writing to a clean page, change page state to dirty.
+		spinlock_acquire(as->as_splock);
+
+		struct page_table_entry* temp = as->as_page_list;
+		while(temp != NULL)
+		{
+			if(temp->vaddr == faultaddress)
+			{
+				set_dirty(temp->paddr);
+				clear_swap_map_entry(temp->vaddr, as);
+				break;
+			}
+			temp = temp->next;
+		
+		}
+		spinlock_release(as->as_splock);
+
+		// update the tlb.
+		spinlock_acquire(tlb_splock);
 		uint32_t ehi, elo;	
 		int spl = splhigh();
 
@@ -874,6 +930,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		tlb_read(&ehi, &elo, i);
 
 		elo = elo | TLBLO_DIRTY; // set the dirty bit.
+		
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		spinlock_release(tlb_splock);
@@ -963,7 +1020,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			page->paddr = paddr;
 			page->page_state = MAPPED;
 
-			// update the tlb entry.
+			// update the tlb entry. But mark it as readonly, if user attempts to write, then we can just fix the tlb entry and update page state to dirty
 
 			uint32_t elo,ehi;
 			int	spl = splhigh();
@@ -980,8 +1037,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				ehi = faultaddress;
 				elo = paddr | TLBLO_VALID;
 
-				if(can_write == 1)
-					elo = elo | TLBLO_DIRTY;
+				// deliberately not setting the dirty bit.
+		/*		if(can_write == 1)
+					elo = elo | TLBLO_DIRTY;*/ 
 
 				tlb_write(ehi, elo, i);
 				splx(spl);
@@ -1009,7 +1067,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// tlb fault and page fault.
 	// create memory for this page	
-	paddr = get_user_page(faultaddress);
+	paddr = get_user_page(faultaddress,false);
 	if(paddr == 0)
 	{
 		spinlock_release(as->as_splock);
