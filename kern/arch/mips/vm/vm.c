@@ -82,8 +82,6 @@ vm_bootstrap(void)
 	paddr_t last = ram_getsize();
 	paddr_t first = ram_getfirstfree(); // cannot use firstpaddr and lastpaddr after this call.
 
-	//	first = first & PAGE_FRAME; // get it aligned
-	//	last  = last & PAGE_FRAME;
 	kprintf("first free address : %d \n", first);
 
 	coremap = (struct coremap_entry*)PADDR_TO_KVADDR(first);
@@ -111,6 +109,7 @@ vm_bootstrap(void)
 		coremap[i].virtual_address = 0;
 		coremap[i].chunks = -1;
 		coremap[i].as = NULL;
+		coremap[i].is_victim = false;
 
 	}
 
@@ -126,8 +125,6 @@ vm_bootstrap(void)
 
 	sm_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(sm_splock);
-	//	sbrk_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
-	//	spinlock_init(sbrk_splock);
 }
 
 /*
@@ -138,35 +135,52 @@ vm_bootstrap(void)
  * dumbvm starts blowing up during the VM assignment.
  */
 
-/*
-   static
-   void
-   dumbvm_can_sleep(void)
-   {
-   if (CURCPU_EXISTS()) {
-// must not hold spinlocks 
-KASSERT(curcpu->c_spinlocks == 0);
+ static
+ void
+ vm_can_sleep(void)
+ {
+ 	if (CURCPU_EXISTS()) 
+  	{
+		// must not hold spinlocks 
+		KASSERT(curcpu->c_spinlocks == 0);
 
-must not be in an interrupt handler 
-KASSERT(curthread->t_in_interrupt == 0);
+		//must not be in an interrupt handler 
+		KASSERT(curthread->t_in_interrupt == 0);
+	}
 }
-}
- */
+ 
 
-static uint32_t get_swap_victim_index()
+// CHANGE THIS TO SUPPORT MULTIPLE PAGE REQUESTS
+static uint32_t get_swap_victim_index(int npages)
 {
-	paddr_t dirty_address = 0;
-
-	for(uint32_t i = first_free_index ; i < coremap_count; i++)
+	if(npages == 1)
 	{
-		if(coremap[i].state == CLEAN)
-			return i;
+		paddr_t dirty_address = 0;
 
-		if(dirty_address == 0 && coremap[i].state == DIRTY)
-			dirty_address = i;
+		for(uint32_t i = first_free_index ; i < coremap_count; i++)
+		{
+			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
+				return i;
+
+			if(dirty_address == 0 && coremap[i].state == DIRTY && coremap[i].is_victim == false)
+				dirty_address = i;
+		}
+
+		return dirty_address;
+	}
+	else
+	{
+		// kernel asking for multiple pages,
+		// it needs contiguous pages.
+		// one option is give it any random sequence of n contiguous pages (user pages and free)
+		// another option is to iterate and find out an optimal sequence which requires the least number of swap outs.
+	
+	
+	
+	
 	}
 
-	return dirty_address;
+	return -1;
 }
 
 static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
@@ -188,6 +202,91 @@ static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 	}
 	spinlock_release(sm_splock);
 	return -1;
+}
+
+static int swap_out(uint32_t victim)
+{
+	KASSERT(victim != 0);
+
+	bool is_clean = false;
+	if(coremap[victim].state == CLEAN)
+		is_clean= true;
+
+	// shootdown tlb entry for this victim, also we need to do something to the page table entry to mark it from being used.
+	vaddr_t victim_vaddr = coremap[victim].virtual_address;
+	struct addrspace* victim_as = coremap[victim].as;
+
+	// shooting down tlb entry. SHOOTDOWN ON ALL CPU's?
+	const struct tlbshootdown tlb = {victim_vaddr};
+	//	vm_tlbshootdown(&tlb);
+	ipi_tlbshootdown_broadcast(&tlb);
+
+	if(is_clean == false)
+	{
+		// get a free position in the swap map and mark it
+		int pos = mark_swap_pos(victim_vaddr, victim_as);
+		KASSERT(pos != -1); // swapmap is full
+
+		// mark the page as swapping, will be used in vm_fault to check if swapping is going on
+		spinlock_acquire(victim_as->as_splock);
+		struct page_table_entry* pt_entry = victim_as->as_page_list;
+		KASSERT(victim_as != NULL);
+
+		while(pt_entry != NULL)
+		{
+			if(pt_entry->vaddr == victim_vaddr)
+			{
+				pt_entry->page_state = SWAPPING;
+				pt_entry->swap_pos = pos;
+				break;
+			}
+			pt_entry = pt_entry->next;
+		}
+
+		KASSERT(pt_entry != NULL);
+		spinlock_release(victim_as->as_splock);
+
+		// release the cm_spinlock
+		spinlock_release(cm_splock);
+
+		// check if we can sleep
+		vm_can_sleep();
+		// do the actual swap out to the position.
+		
+
+
+		// update the page table entry of the owner of the victim,i.e., tell it that this page has been swapped out.
+		spinlock_acquire(victim_as->as_splock);
+		KASSERT(pt_entry->vaddr == victim_vaddr);
+		KASSERT(pt_entry->page_state == SWAPPING);
+		pt_entry->page_state = SWAPPED;
+
+		spinlock_release(victim_as->as_splock);
+		spinlock_acquire(cm_splock);
+	}
+	else
+	{
+		// already a clean page, so just mark it as swapped.
+		spinlock_acquire(victim_as->as_splock);
+		struct page_table_entry* pt_entry = victim_as->as_page_list;
+		KASSERT(victim_as != NULL);
+
+		while(pt_entry != NULL)
+		{
+			if(pt_entry->vaddr == victim_vaddr)
+			{
+				KASSERT(pt_entry->page_state == MAPPED);
+				pt_entry->page_state = SWAPPED;
+				break;
+			}
+			pt_entry = pt_entry->next;
+		}
+
+		KASSERT(pt_entry != NULL);
+		spinlock_release(victim_as->as_splock);
+	}
+
+	return 0;
 }
 
 static
@@ -244,12 +343,15 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 								coremap[k].state = DIRTY;
 								coremap[k].virtual_address = vaddr;
 								coremap[k].as = proc_getas();
+								coremap[k].is_victim = false;
+
 							}
 							else
 							{
 								coremap[k].state = FIXED;
 								coremap[k].virtual_address = 0;
 								coremap[k].as = NULL;
+								coremap[k].is_victim = false;
 							}
 						}
 						break;
@@ -262,6 +364,9 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 	}
 
 	// swapping code
+	// This is different for user and kernel pages. Kernel pages require contiguous swapping
+	// TO DO : Support for kernel contiguous pages.
+	is_user_page = false;
 	if(is_user_page == true && addr == 0)
 	{
 		// no free page, need to swap out a user page
@@ -269,93 +374,52 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr)
 		spinlock_acquire(cm_splock);
 
 		// select a candidate and mark it as victim
-		uint32_t victim = get_swap_victim_index();
+		uint32_t victim = get_swap_victim_index(npages);
 		KASSERT(victim != 0);
 
-		bool is_clean = false;
-		if(coremap[victim].state == CLEAN)
-			is_clean= true;
-
-		coremap[victim].state = VICTIM;
-
-		// shootdown tlb entry for this victim, also we need to do something to the page table entry to mark it from being used.
-		vaddr_t victim_vaddr = coremap[victim].virtual_address;
-		struct addrspace* victim_as = coremap[victim].as;
-
-		// shooting down tlb entry. SHOOTDOWN ON ALL CPU's?
-		const struct tlbshootdown tlb = {victim_vaddr};
-	//	vm_tlbshootdown(&tlb);
-		ipi_tlbshootdown_broadcast(&tlb);
-
-		if(is_clean == false)
+		for(uint32_t i = victim; i < victim + npages; i++)
 		{
-			//We have a dirty page, should write it to disk.
+			KASSERT(coremap[i].state != FIXED);
+			coremap[i].is_victim = true;
+		}
 
-
-			// get a free position in the swap map and mark it
-			int pos = mark_swap_pos(victim_vaddr, victim_as);
-			KASSERT(pos != -1); // swapmap is full
-
-			// mark the page as swapping, will be used in vm_fault to check if swapping is going on
-			spinlock_acquire(victim_as->as_splock);
-			struct page_table_entry* pt_entry = victim_as->as_page_list;
-			KASSERT(victim_as != NULL);
-
-			while(pt_entry != NULL)
+		for(uint32_t i = victim; i < victim + npages; i++)
+		{
+			if(coremap[i].state != FREE)
 			{
-				if(pt_entry->vaddr == victim_vaddr)
-				{
-					pt_entry->page_state = SWAPPING;
-					pt_entry->swap_pos = pos;
-					break;
-				}
-				pt_entry = pt_entry->next;
+				int err = swap_out(i);
+				KASSERT(err == 0);
 			}
-
-			KASSERT(pt_entry != NULL);
-			spinlock_release(victim_as->as_splock);
-
-			// release the cm_spinlock
-			spinlock_release(cm_splock);
-
-			// do the actual swap out to the position.
+		}
 
 
-			// update the page table entry of the owner of the victim,i.e., tell it that this page has been swapped out.
-			spinlock_acquire(victim_as->as_splock);
-			KASSERT(pt_entry->vaddr == victim_vaddr);
-			KASSERT(pt_entry->page_state == SWAPPING);
-			pt_entry->page_state = SWAPPED;
 
-			spinlock_release(victim_as->as_splock);
-			spinlock_acquire(cm_splock);
+		//give this new page to whoever asked for it.
+		if(is_user_page == true)
+		{
+			coremap[victim].state = DIRTY;
+			coremap[victim].chunks = 1;
+			coremap[victim].virtual_address = vaddr;
+			coremap[victim].as = proc_getas();
+			coremap[victim].is_victim = false;
 		}
 		else
 		{
-			// already a clean page, so just mark it as swapped.
-			spinlock_acquire(victim_as->as_splock);
-			struct page_table_entry* pt_entry = victim_as->as_page_list;
-			KASSERT(victim_as != NULL);
-
-			while(pt_entry != NULL)
+			coremap[victim].state = FIXED;
+			coremap[victim].chunks = npages;
+			coremap[victim].virtual_address = 0;
+			coremap[victim].as = NULL;
+			coremap[victim].is_victim = false;
+			for(uint32_t i = victim + 1 ; i < victim + npages; i++)
 			{
-				if(pt_entry->vaddr == victim_vaddr)
-				{
-					pt_entry->page_state = SWAPPED;
-					break;
-				}
-				pt_entry = pt_entry->next;
+				coremap[i].state = FIXED;
+				coremap[i].chunks = -1;
+				coremap[i].virtual_address = 0;
+				coremap[i].as = NULL;
+				coremap[i].is_victim = false;
 			}
-
-			KASSERT(pt_entry != NULL);
-			spinlock_release(victim_as->as_splock);
 		}
 
-		//give this new page to whoever asked for it.
-		coremap[victim].state = DIRTY;
-		coremap[victim].chunks = -1;
-		coremap[victim].virtual_address = vaddr;
-		coremap[victim].as = proc_getas();
 		addr = victim*PAGE_SIZE;
 		spinlock_release(cm_splock);
 	}
@@ -398,16 +462,20 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 
 	KASSERT(coremap[page_index].state != FIXED);
 	KASSERT(coremap[page_index].state != FREE);
+	KASSERT(coremap[page_index].is_victim == false);
 
 	spinlock_acquire(cm_splock);
 
 	coremap[page_index].state = FREE;
 	coremap[page_index].chunks = -1; // sheer paranoia.
+	coremap[page_index].is_victim = false;
+	coremap[page_index].virtual_address = 0;
+	coremap[page_index].as = NULL;
 
 	spinlock_release(cm_splock);
 	const struct tlbshootdown tlb = {vaddr};
 	vm_tlbshootdown(&tlb);
-//	ipi_tlbshootdown_broadcast(&tlb);
+	//	ipi_tlbshootdown_broadcast(&tlb);
 
 
 	if(free_node == true)
@@ -494,6 +562,7 @@ free_kpages(vaddr_t addr)
 
 	spinlock_acquire(cm_splock);
 	KASSERT(coremap[page_index].state != FREE);
+	KASSERT(coremap[page_index].is_victim == false);
 
 	//Should we allow the user to do this !!.. IMPORTANT - ASK TA.
 	//km2 and km5 are asking me to free memory that they have not called to be allocated. Is this fine ??
@@ -503,6 +572,7 @@ free_kpages(vaddr_t addr)
 		kprintf("*** freeing a page which was allocated with ram_stealmem() *****");
 		coremap[page_index].state = FREE;
 		coremap[page_index].chunks = -1;
+		coremap[page_index].is_victim = false;
 
 	}
 	else
@@ -512,7 +582,7 @@ free_kpages(vaddr_t addr)
 		{
 			coremap[page_index].state = FREE;
 			coremap[page_index].chunks = -1; // sheer paranoia.
-
+			coremap[page_index].is_victim = false;
 			chunks--;
 			page_index++;
 
@@ -564,10 +634,10 @@ vm_tlbshootdown_all(void)
 	void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
-	
+
 	KASSERT(ts != NULL);
 	vaddr_t vaddr = ts->vaddr;
-	
+
 	spinlock_acquire(tlb_splock);
 	int	spl = splhigh();
 	int index = tlb_probe(vaddr,0);

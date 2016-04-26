@@ -80,6 +80,7 @@ typedef enum state
 	unsigned int state : 3;
     unsigned int chunks : 7;
 	struct addrspace* as;
+	unsigned int is_victim : 1;
 
  };
 
