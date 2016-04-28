@@ -81,6 +81,7 @@ uint32_t coremap_count = 0;
 uint32_t first_free_index = 0;
 vaddr_t copy_buffer_vaddr = 0;
 uint32_t last_swapped = 0;
+bool swapping_started = false;
 	void
 vm_bootstrap(void)
 {
@@ -171,27 +172,27 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 		{
 			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
 			{
-//				kprintf("got clean page 1\n");
+	//			kprintf("got clean page 1\n");
 				last_swapped = i;
 				return i;
 			}
 		}
 
 		
-		for(uint32_t i = first_free_index; i< last_swapped; i++)
+/*		for(uint32_t i = first_free_index; i< last_swapped; i++)
 		{
 			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
 			{
-//				kprintf("got clean page 2\n");
+				kprintf("got clean page 2\n");
 				last_swapped = i;
 				return i;
 			}
 		}
-
+*/
 		for(uint32_t i = last_swapped + 1; i < coremap_count; i ++)
 		{	if(coremap[i].state == DIRTY && coremap[i].is_victim == false)
 			{
-//				kprintf("got dirty page 1 \n");
+		//		kprintf("got dirty page 1 \n");
 				last_swapped = i;
 				return i;
 			}
@@ -201,12 +202,24 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 		{
 			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)
 			{
-//				kprintf("got dirty page 2 \n");
+		//		kprintf("got dirty page 2 \n");
 				last_swapped = i;
 				return i;
 			}
 		
 		}
+
+
+		for(uint32_t i = first_free_index; i< last_swapped; i++)
+		{
+			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
+			{
+				kprintf("got clean page 2\n");
+				last_swapped = i;
+				return i;
+			}
+		}
+
 	}
 	else
 	{
@@ -245,13 +258,13 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 	
 	}
 
-	return -1;
+	return 0;
 }
 int write_to_disk(uint32_t page_index, int swap_pos)
 {
 	if(swap_disk_opened == false)
 	{
-		kprintf("swap disk init code \n");
+	//	kprintf("swap disk init code \n");
 		char swap_disk_name[] = "lhd0raw:";
 		int result = vfs_open(swap_disk_name,0,O_RDWR,&swap_disk);
 		if(result)
@@ -260,6 +273,7 @@ int write_to_disk(uint32_t page_index, int swap_pos)
 		  kprintf("cannot open swap disk\n");
 		  return -1;
 		}
+		swapping_started = true;	
 		swap_disk_opened = true;
 	
 	}
@@ -318,7 +332,7 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
 	if(buffer == 0) // we dont have a target buffer already, so allocate a page here.
 	{
 		paddr_t paddr = get_user_page(vaddr,true);
-		kprintf("swap in got page : %d \n", paddr/PAGE_SIZE);
+	//	kprintf("swap in got page : %d \n", paddr/PAGE_SIZE);
 		KASSERT(paddr != 0);
 
 		as_zero_region(paddr,1);
@@ -350,7 +364,7 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
 
 static int swap_out(uint32_t victim)
 {
-	kprintf(" swap out  victim : %d \n", victim);
+//	kprintf(" swap out  victim : %d \n", victim);
 	KASSERT(victim != 0);
 
 	bool is_clean = false;
@@ -443,6 +457,7 @@ static
 	paddr_t
 getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_in)
 {
+	(void)is_swap_in;
 	paddr_t addr = 0;
 	if(vm_initialized == false)
 	{
@@ -521,13 +536,18 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 	// swapping code
 	// This is different for user and kernel pages. Kernel pages require contiguous swapping
 	// TO DO : Support for kernel contiguous pages.
-//	is_user_page = false;
-	if(is_user_page == true && addr == 0)
+	if(addr ==0 && is_user_page == false && swapping_started == false)
+	{
+		kprintf("swapping not started \n"); 
+	}
+	else if(addr == 0)
 	{
 		// no free page, need to swap out a user page
 		// acquire coremap spinlock
 	//	kprintf("inside swap code \n");
 		spinlock_acquire(cm_splock);
+//		if(is_user_page == false)
+//			kprintf(" ** npages : %lu ** \n", npages);
 
 		// select a candidate and mark it as victim
 		uint32_t victim = get_swap_victim_index(npages);
@@ -539,17 +559,21 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 			coremap[i].is_victim = true;
 		}
 
+
 		for(uint32_t i = victim; i < victim + npages; i++)
 		{
 			if(coremap[i].state != FREE)
 			{
-			//	kprintf("calling swap out \n");
+		//		if(is_user_page == false)
+		//		kprintf("calling swap out \n");
+
 				int err = swap_out(i);
+
+		//		if(is_user_page == false)
+		//		kprintf("came out of swap out \n");
 				KASSERT(err == 0);
 			}
 		}
-
-//		kprintf("came back from swap out \n");
 
 
 		//give this new page to whoever asked for it.
@@ -633,7 +657,7 @@ static void set_dirty(paddr_t paddr)
 
 static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as)
 {
-	kprintf("inside clear swap map \n");
+//	kprintf("inside clear swap map \n");
 	spinlock_acquire(sm_splock);
 	int i = 0;
 	for(i = 0; i < SWAP_MAX; i++)
@@ -652,6 +676,24 @@ static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as)
 }
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos)
 {
+
+	if(is_swapped == true)
+	{
+		spinlock_acquire(sm_splock);
+		KASSERT(swap_map[swap_pos].vaddr == vaddr);
+		KASSERT(swap_map[swap_pos].as == as);
+
+		swap_map[swap_pos].vaddr = 0;
+		swap_map[swap_pos].as = NULL;
+		spinlock_release(sm_splock);
+
+		const struct tlbshootdown tlb = {vaddr};
+		vm_tlbshootdown(&tlb);
+		return;
+	
+	}
+
+
 	KASSERT(as!= NULL);
 
 	uint32_t page_index = paddr/ PAGE_SIZE;
@@ -664,18 +706,6 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 	KASSERT(coremap[page_index].is_victim == false);
 
 
-	if(is_swapped == true)
-	{
-		spinlock_acquire(sm_splock);
-		KASSERT(swap_map[swap_pos].vaddr == vaddr);
-		KASSERT(swap_map[swap_pos].as == as);
-
-		swap_map[swap_pos].vaddr = 0;
-		swap_map[swap_pos].as = NULL;
-		spinlock_release(sm_splock);
-		return;
-	
-	}
 
 	spinlock_acquire(cm_splock);
 	coremap[page_index].state = FREE;
@@ -989,7 +1019,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		KASSERT(i >= 0);
 		tlb_read(&ehi, &elo, i);
 
-		elo = elo | TLBLO_DIRTY; // set the dirty bit.
+		elo = elo | TLBLO_DIRTY; // set the dirty bit
 		
 		tlb_write(ehi, elo, i);
 		splx(spl);
@@ -1098,8 +1128,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				elo = paddr | TLBLO_VALID;
 
 				// deliberately not setting the dirty bit.
-		/*		if(can_write == 1)
-					elo = elo | TLBLO_DIRTY;*/ 
+			/*	if(can_write == 1)
+					elo = elo | TLBLO_DIRTY;*/
 
 				tlb_write(ehi, elo, i);
 				splx(spl);
@@ -1146,6 +1176,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
+	if(spinlock_do_i_hold(as->as_splock) == true)
 	spinlock_release(as->as_splock);
 	if(i == -1)
 		return ENOMEM;
