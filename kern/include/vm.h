@@ -124,5 +124,8 @@ unsigned int coremap_free_bytes(void);
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
 
+paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer);
+int mark_swap_pos(vaddr_t vaddr, struct addrspace* as);
 
+int write_to_disk(uint32_t page_index, int swap_pos);
 #endif /* _VM_H_ */

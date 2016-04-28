@@ -79,6 +79,7 @@ static struct coremap_entry* coremap = NULL;
 paddr_t free_memory_start_address  = 0;
 uint32_t coremap_count = 0;
 uint32_t first_free_index = 0;
+vaddr_t copy_buffer_vaddr = 0;
 	void
 vm_bootstrap(void)
 {
@@ -131,6 +132,7 @@ vm_bootstrap(void)
 
 	sm_splock = (struct spinlock*)kmalloc(sizeof(struct spinlock));
 	spinlock_init(sm_splock);
+	copy_buffer_vaddr = alloc_kpages(1);
 }
 
 /*
@@ -213,10 +215,8 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 
 	return -1;
 }
-static int write_to_disk(uint32_t page_index, int swap_pos)
+int write_to_disk(uint32_t page_index, int swap_pos)
 {
-	(void)page_index;
-	(void)swap_pos;
 	if(swap_disk_opened == false)
 	{
 		kprintf("swap disk init code \n");
@@ -246,7 +246,7 @@ static int write_to_disk(uint32_t page_index, int swap_pos)
 	return 0;
 }
 
-static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
+int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 {
 	spinlock_acquire(sm_splock);
 
@@ -267,7 +267,7 @@ static int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 	return -1;
 }
 
-static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
+paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
 {
 	spinlock_acquire(sm_splock);
 	int swap_pos = 0;
@@ -280,15 +280,22 @@ static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
 
 	KASSERT(swap_pos<SWAP_MAX);
 
-	paddr_t paddr = get_user_page(vaddr,true);
-	KASSERT(paddr != 0);
-	
+	vaddr_t virtual_address;
+	if(buffer == 0) // we dont have a target buffer already, so allocate a page here.
+	{
+		paddr_t paddr = get_user_page(vaddr,true);
+		KASSERT(paddr != 0);
+
+		as_zero_region(paddr,1);
+		virtual_address = PADDR_TO_KVADDR(paddr);
+	}
+	else
+		virtual_address = buffer;
 
 	KASSERT(swap_disk_opened == true);
 
 	struct iovec iov;
 	struct uio uio;
-	vaddr_t virtual_address = PADDR_TO_KVADDR(paddr);
 
 	uio_kinit(&iov,&uio,(void*)virtual_address,PAGE_SIZE,swap_pos*PAGE_SIZE,UIO_READ);
 	
@@ -302,7 +309,7 @@ static paddr_t swap_in(vaddr_t vaddr, struct addrspace* as)
 	swap_map[swap_pos].vaddr = 0;
 	spinlock_release(sm_splock);
 */
-	return paddr;
+	return KVADDR_TO_PADDR(virtual_address);
 
 }
 
@@ -340,6 +347,7 @@ static int swap_out(uint32_t victim)
 			{
 				pt_entry->page_state = SWAPPING;
 				pt_entry->swap_pos = pos;
+				pt_entry->paddr = 0;
 				break;
 			}
 			pt_entry = pt_entry->next;
@@ -586,10 +594,9 @@ static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as)
 			swap_map[i].as = NULL;
 		
 		}
-	
 	}
-
 	KASSERT(i < SWAP_MAX);
+	spinlock_release(sm_splock);
 
 }
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos)
@@ -1013,7 +1020,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			spinlock_release(as->as_splock);
 			// this page is swapped out. Bring it back into memory
 			vm_can_sleep();
-			paddr_t paddr = swap_in(faultaddress,as);
+			paddr_t paddr = swap_in(faultaddress,as,0);
 			spinlock_acquire(as->as_splock);
 
 			// update page_table_entry and page_state

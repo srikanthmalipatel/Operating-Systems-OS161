@@ -43,6 +43,7 @@
  */
 
 extern struct spinlock* cm_splock;
+extern vaddr_t copy_buffer_vaddr;
 
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -83,8 +84,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	spinlock_acquire(old->as_splock);
 	spinlock_acquire(newas->as_splock);
+	spinlock_acquire(old->as_splock);
 	struct as_region* r_old = old->as_region_list;
 	while(r_old != NULL)
 	{
@@ -131,31 +132,58 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		p_new->page_state = p_old->page_state; // FOR NOW. change this later.
 		p_new->swap_pos = -1;
 
-		paddr_t paddr = get_user_page(p_new->vaddr, false);
-		if(paddr == 0)
+		KASSERT(p_old->page_state != SWAPPING);
+
+		if(p_old->page_state == SWAPPED)
 		{
+			// this page is in disk, so we need to create a copy of that page somewhere in disk and then update the page table entry of the new process.
+			// going with the disk->memory->disk approach suggested in a recitation video by jinghao shi.
+			// Allocate a buffer at vm_bootstrap of size 4k (1 page). Use this buffer to temproarily copy data from disk to here and then to disk again
+			// then clear the buffer. This buffer is a shared resource, so we need a lock around it.
+
 			spinlock_release(old->as_splock);
 			spinlock_release(newas->as_splock);
-			as_destroy(newas);
-			return ENOMEM;
+			swap_in(p_old->vaddr,old,copy_buffer_vaddr);
+			int pos = mark_swap_pos(p_new->vaddr, newas);
+			KASSERT(pos != -1);
+			int err = write_to_disk(KVADDR_TO_PADDR(copy_buffer_vaddr), pos);
+			KASSERT(err == 0);
+			spinlock_acquire(newas->as_splock);
+			spinlock_acquire(old->as_splock);
+			as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
+			p_new->page_state = SWAPPED;
+			p_new->swap_pos = pos;
+			p_new->paddr = 0;
 		}
-		memmove((void*)PADDR_TO_KVADDR(paddr),
-			(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
-			PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
+		else
+		{
+
+			paddr_t paddr = get_user_page(p_new->vaddr, false);
+			if(paddr == 0)
+			{
+				spinlock_release(old->as_splock);
+				spinlock_release(newas->as_splock);
+				as_destroy(newas);
+				return ENOMEM;
+			}
+			memmove((void*)PADDR_TO_KVADDR(paddr),
+				(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
+				PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
 														// the function will translate it into a physical address again and free it. ugly Hack. but no other way.
 
-		p_new->paddr = paddr;
+			p_new->paddr = paddr;
         
 
-		int ret = page_list_add_node(&newas->as_page_list,p_new);
-		if(ret == -1)
-		{
-			spinlock_release(old->as_splock);
-			spinlock_release(newas->as_splock);
-			as_destroy(newas);
-			return ENOMEM;
+			int ret = page_list_add_node(&newas->as_page_list,p_new);
+			if(ret == -1)
+			{
+				spinlock_release(old->as_splock);
+				spinlock_release(newas->as_splock);
+				as_destroy(newas);
+				return ENOMEM;
+			}
+			p_old = p_old->next;
 		}
-		p_old = p_old->next;
 	
 	}
 
@@ -178,11 +206,11 @@ as_destroy(struct addrspace *as)
 	while(cur != NULL)
 	{
 		next = cur->next;
-		KASSERT(cur->page_state == MAPPED);
-		while(cur->page_state == SWAPPING)
+		KASSERT(cur->page_state != SWAPPING);
+	/*	while(cur->page_state == SWAPPING)
 		{
 			thread_yield();
-		}
+		}*/
 
 		bool is_swapped = false;
 		if(cur->page_state == SWAPPED)
