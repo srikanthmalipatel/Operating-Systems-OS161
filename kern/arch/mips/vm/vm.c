@@ -1,4 +1,5 @@
 /*
+	
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -42,6 +43,7 @@
 #include <vfs.h>
 #include <uio.h>
 #include <kern/fcntl.h>
+#include <kern/stat.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -82,6 +84,8 @@ uint32_t first_free_index = 0;
 vaddr_t copy_buffer_vaddr = 0;
 uint32_t last_swapped = 0;
 bool swapping_started = false;
+
+const char swap_disk_name[] = "lhd0raw:";
 	void
 vm_bootstrap(void)
 {
@@ -136,6 +140,7 @@ vm_bootstrap(void)
 	spinlock_init(sm_splock);
 	copy_buffer_vaddr = alloc_kpages(1);
 	last_swapped = first_free_index;
+//	swap_disk = kmalloc(sizeof(struct vnode));
 }
 
 /*
@@ -160,39 +165,60 @@ vm_bootstrap(void)
 	}
 }
  
+static bool is_code_page(vaddr_t vaddr, struct addrspace* as)
+{
+	if(as->code_start <= vaddr && as->code_end > vaddr)
+		return true;
+	
+	return false;
+
+}
+
+static bool is_swap_candidate(uint32_t index)
+{
+	// remove the code page constraint once the bug is fixed
+	if(coremap[index].state == CLEAN && coremap[index].is_victim == false && !is_code_page(coremap[index].virtual_address, coremap[index].as))
+		return true;
+	
+	if(coremap[index].state == DIRTY && coremap[index].is_victim == false && !is_code_page(coremap[index].virtual_address, coremap[index].as))
+		return true;
+	
+	return false;
+
+}
 
 // CHANGE THIS TO SUPPORT MULTIPLE PAGE REQUESTS
 static uint32_t get_swap_victim_index(unsigned long npages)
 {
-//	kprintf("get swap victim index \n");
+	KASSERT(npages == 1);
+	uint32_t index = random() % coremap_count;
+	while(!is_swap_candidate(index))
+		index = random() % coremap_count;
+	
+	return index;
+
+	last_swapped = last_swapped % coremap_count;
 	if(npages == 1)
 	{
 
 		for(uint32_t i = last_swapped + 1 ; i < coremap_count; i++)
 		{
-			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
+			
+			if(coremap[i].state == CLEAN && coremap[i].is_victim == false )//&& !is_code_page(coremap[i].virtual_address,coremap[i].as))
 			{
-	//			kprintf("got clean page 1\n");
+				//kprintf("got clean page 1\n");
 				last_swapped = i;
 				return i;
 			}
 		}
 
 		
-/*		for(uint32_t i = first_free_index; i< last_swapped; i++)
-		{
-			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
-			{
-				kprintf("got clean page 2\n");
-				last_swapped = i;
-				return i;
-			}
-		}
-*/
 		for(uint32_t i = last_swapped + 1; i < coremap_count; i ++)
-		{	if(coremap[i].state == DIRTY && coremap[i].is_victim == false)
+		{	
+			
+			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)// && !is_code_page(coremap[i].virtual_address,coremap[i].as))
 			{
-		//		kprintf("got dirty page 1 \n");
+			//	kprintf("got dirty page 1 \n");
 				last_swapped = i;
 				return i;
 			}
@@ -200,9 +226,10 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 
 		for(uint32_t i = first_free_index; i< last_swapped; i++)
 		{
-			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)
+			
+			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)// && !is_code_page(coremap[i].virtual_address,coremap[i].as))
 			{
-		//		kprintf("got dirty page 2 \n");
+			//	kprintf("got dirty page 2 \n");
 				last_swapped = i;
 				return i;
 			}
@@ -221,7 +248,7 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 		}
 
 	}
-	else
+/*	else
 	{
 		// kernel asking for multiple pages,
 		// it needs contiguous pages.
@@ -229,6 +256,7 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 		// another option is to iterate and find out an optimal sequence which requires the least number of swap outs.
 		
 		// this is the worst possible solution. should optimize this function
+		kprintf("**** should not be here **** \n");
 		for(uint32_t i = first_free_index; i < coremap_count; i++)
 		{
 			if((coremap[i].is_victim == false) && (coremap[i].state == FREE || coremap[i].state == CLEAN || coremap[i].state == DIRTY))
@@ -256,46 +284,67 @@ static uint32_t get_swap_victim_index(unsigned long npages)
 			
 		}
 	
-	}
+	}*/
 
 	return 0;
 }
-int write_to_disk(uint32_t page_index, int swap_pos)
+
+void open_swap_disk()
 {
 	if(swap_disk_opened == false)
 	{
 	//	kprintf("swap disk init code \n");
-		char swap_disk_name[] = "lhd0raw:";
-		int result = vfs_open(swap_disk_name,0,O_RDWR,&swap_disk);
+		char temp_swap[sizeof(swap_disk_name)];
+		strcpy(temp_swap,swap_disk_name);
+		int result = vfs_open(temp_swap,O_RDWR,0,&swap_disk);
 		if(result)
 		{
-		  // what do I do now.
-		  kprintf("cannot open swap disk\n");
-		  return -1;
+			kprintf("disk cant be opened \n");
+			return;
 		}
 		swapping_started = true;	
 		swap_disk_opened = true;
+
+	//	struct stat file_stats;
+	//	file_stats.st_size = 0;
+	//	result = VOP_STAT(swap_disk, &file_stats);
+	//	KASSERT(result == 0);
+	//	kprintf("disk size : %lld \n",file_stats.st_size);
 	
 	}
+
+}
+
+int write_to_disk(uint32_t page_index, int swap_pos)
+{
 
 	struct iovec iov;
 	struct uio uio;
 	vaddr_t vaddr = PADDR_TO_KVADDR(page_index*PAGE_SIZE);
-	
+
 	uio_kinit(&iov,&uio,(void*)vaddr,PAGE_SIZE,swap_pos*PAGE_SIZE,UIO_WRITE);
 	
 	vm_can_sleep();
 	
 	int result = VOP_WRITE(swap_disk,&uio);
 	KASSERT(result == 0);
-
+	KASSERT(uio.uio_resid == 0);
 	return 0;
 }
 
 int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 {
-//	kprintf("inside mark swap pos \n");
 	spinlock_acquire(sm_splock);
+	for(int i = 0 ; i < SWAP_MAX; i++)
+	{
+	//	if(swap_map[i].vaddr == vaddr)
+	//		kprintf("found match for vaddr  %d, as  : %p \n", vaddr,(void*)as);
+		if(swap_map[i].as == as && swap_map[i].vaddr == vaddr)
+		{
+			spinlock_release(sm_splock);
+			return i;
+		}
+	}
 
 	for(int i = 0 ; i < SWAP_MAX; i++)
 	{
@@ -305,7 +354,7 @@ int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 			swap_map[i].vaddr = vaddr;
 			swap_map[i].as = as;
 			spinlock_release(sm_splock);
-	//		kprintf("exiting mark swap pos \n");
+	//		kprintf("writing vaddr : %d , index : %d\n",vaddr,i);
 			return i;
 
 		}
@@ -315,26 +364,37 @@ int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 	return -1;
 }
 
-paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
+static int get_swap_pos(vaddr_t vaddr, struct addrspace*as)
 {
 	spinlock_acquire(sm_splock);
-	int swap_pos = 0;
-	for(swap_pos = 0; swap_pos < SWAP_MAX; swap_pos++)
+	for(int i = 0 ; i < SWAP_MAX; i++)
 	{
-		if(swap_map[swap_pos].vaddr == vaddr && swap_map[swap_pos].as == as)
-			break;
+		if(swap_map[i].vaddr == vaddr && swap_map[i].as == as)
+		{
+			spinlock_release(sm_splock);
+			return i;
+		}
 	}
 	spinlock_release(sm_splock);
+	return -1;
 
-	KASSERT(swap_pos<SWAP_MAX);
+}
+
+paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
+{
+	int swap_pos = get_swap_pos(vaddr, as);
+	KASSERT(swap_pos != -1);
+
+	if(is_code_page(vaddr,as))
+		kprintf("bringing back code page \n");
 
 	vaddr_t virtual_address;
 	if(buffer == 0) // we dont have a target buffer already, so allocate a page here.
 	{
-		paddr_t paddr = get_user_page(vaddr,true);
+		paddr_t paddr = get_user_page(vaddr,true,as);
 	//	kprintf("swap in got page : %d \n", paddr/PAGE_SIZE);
 		KASSERT(paddr != 0);
-
+		paddr = paddr & PAGE_FRAME;
 		as_zero_region(paddr,1);
 		virtual_address = PADDR_TO_KVADDR(paddr);
 	}
@@ -352,6 +412,8 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
 	
 	int result = VOP_READ(swap_disk,&uio);
 	KASSERT(result == 0);
+	KASSERT(uio.uio_resid == 0);
+//	kprintf("read vaddr : %d , as : %p, from pos : %d\n",vaddr,(void*)as,swap_pos);
 
 /*	spinlock_acquire(sm_splock);
 	swap_map[swap_pos].as = NULL;
@@ -364,7 +426,6 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer)
 
 static int swap_out(uint32_t victim)
 {
-//	kprintf(" swap out  victim : %d \n", victim);
 	KASSERT(victim != 0);
 
 	bool is_clean = false;
@@ -374,10 +435,14 @@ static int swap_out(uint32_t victim)
 	// shootdown tlb entry for this victim, also we need to do something to the page table entry to mark it from being used.
 	vaddr_t victim_vaddr = coremap[victim].virtual_address;
 	struct addrspace* victim_as = coremap[victim].as;
+	if(is_code_page(victim_vaddr, victim_as))
+		kprintf("evicting code page \n");
 
-	// shooting down tlb entry. SHOOTDOWN ON ALL CPU's?
+	KASSERT(coremap[victim].is_victim == true);
+
+	// shooting down tlb entry. SHOOTDOWN ON ALL CPUs?
 	const struct tlbshootdown tlb = {victim_vaddr};
-	//	vm_tlbshootdown(&tlb);
+//	vm_tlbshootdown(&tlb);
 	ipi_tlbshootdown_broadcast(&tlb);
 
 	if(is_clean == false)
@@ -416,6 +481,7 @@ static int swap_out(uint32_t victim)
 		// do the actual swap out to the position.
 	//	kprintf("calling write \n");
 		int err = write_to_disk(victim, pos);
+	//	kprintf("wrote vaddr : %d ,as : %p to pos : %d \n",victim_vaddr,(void *)victim_as,pos);
 		KASSERT(err == 0);
 
 
@@ -424,6 +490,8 @@ static int swap_out(uint32_t victim)
 		KASSERT(pt_entry->vaddr == victim_vaddr);
 		KASSERT(pt_entry->page_state == SWAPPING);
 		pt_entry->page_state = SWAPPED;
+		pt_entry->swap_pos = pos;
+		pt_entry->paddr = 0;
 
 		spinlock_release(victim_as->as_splock);
 		spinlock_acquire(cm_splock);
@@ -441,6 +509,7 @@ static int swap_out(uint32_t victim)
 			{
 				KASSERT(pt_entry->page_state == MAPPED);
 				pt_entry->page_state = SWAPPED;
+				pt_entry->paddr = 0;
 				break;
 			}
 			pt_entry = pt_entry->next;
@@ -455,7 +524,7 @@ static int swap_out(uint32_t victim)
 
 static
 	paddr_t
-getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_in)
+getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_in, struct addrspace* as)
 {
 	(void)is_swap_in;
 	paddr_t addr = 0;
@@ -507,12 +576,12 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 							// No. kernel threads can call kmalloc, set owner as current process. So can be dirty, just need to check if it is kernel to set FIXED.
 							if(is_user_page == true)
 							{
-								if(is_swap_in == true)
+								/*if(is_swap_in == true)
 									coremap[k].state = CLEAN;
-								else
+								else*/
 									coremap[k].state = DIRTY;
 								coremap[k].virtual_address = vaddr;
-								coremap[k].as = proc_getas();
+								coremap[k].as = as;
 								coremap[k].is_victim = false;
 
 							}
@@ -536,41 +605,41 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 	// swapping code
 	// This is different for user and kernel pages. Kernel pages require contiguous swapping
 	// TO DO : Support for kernel contiguous pages.
-	if(addr ==0 && is_user_page == false && swapping_started == false)
+	if(addr==0 && swapping_started == false)
 	{
-		kprintf("swapping not started \n"); 
+		return addr; 
 	}
 	else if(addr == 0)
 	{
 		// no free page, need to swap out a user page
 		// acquire coremap spinlock
-	//	kprintf("inside swap code \n");
+	//	if(is_user_page == true)
+	//	kprintf("need page for vaddr : %d, as : %p \n", vaddr, (void *)as);
 		spinlock_acquire(cm_splock);
-//		if(is_user_page == false)
-//			kprintf(" ** npages : %lu ** \n", npages);
+		KASSERT(npages == 1);
+		
+		for(uint32_t i = first_free_index; i < coremap_count; i++)
+			KASSERT(coremap[i].state != FREE);
 
 		// select a candidate and mark it as victim
 		uint32_t victim = get_swap_victim_index(npages);
+	//	kprintf("got victim : %d \n", victim);
 		KASSERT(victim != 0);
 
 		for(uint32_t i = victim; i < victim + npages; i++)
 		{
 			KASSERT(coremap[i].state != FIXED);
+			KASSERT(coremap[i].state != FREE);
 			coremap[i].is_victim = true;
 		}
 
 
+		// swap out
 		for(uint32_t i = victim; i < victim + npages; i++)
 		{
 			if(coremap[i].state != FREE)
 			{
-		//		if(is_user_page == false)
-		//		kprintf("calling swap out \n");
-
 				int err = swap_out(i);
-
-		//		if(is_user_page == false)
-		//		kprintf("came out of swap out \n");
 				KASSERT(err == 0);
 			}
 		}
@@ -579,13 +648,13 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 		//give this new page to whoever asked for it.
 		if(is_user_page == true)
 		{
-			if(is_swap_in == true)
+		/*	if(is_swap_in == true)
 				coremap[victim].state = CLEAN;
-			else
+			else*/
 				coremap[victim].state = DIRTY;
 			coremap[victim].chunks = 1;
 			coremap[victim].virtual_address = vaddr;
-			coremap[victim].as = proc_getas();
+			coremap[victim].as = as;
 			coremap[victim].is_victim = false;
 		}
 		else
@@ -620,7 +689,7 @@ alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	pa = getppages(npages, false,0,false);
+	pa = getppages(npages, false,0,false,NULL);
 	if (pa==0) 
 	{
 		return 0;
@@ -628,10 +697,16 @@ alloc_kpages(unsigned npages)
 	return PADDR_TO_KVADDR(pa);
 }
 
-paddr_t get_user_page(vaddr_t vaddr, bool is_swap_in)
+paddr_t get_user_page(vaddr_t vaddr, bool is_swap_in, struct addrspace* as)
 {
+/*	static bool first = true;
+	if(first == true)
+	{
+		open_swap_disk();
+		first = false;
+	}*/
 	paddr_t pa;
-	pa = getppages(1,true,vaddr,is_swap_in);
+	pa = getppages(1,true,vaddr,is_swap_in, as);
 
 	return pa;
 }
@@ -666,6 +741,7 @@ static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as)
 		{
 			swap_map[i].vaddr = 0;
 			swap_map[i].as = NULL;
+		//	kprintf("cleared swap entry for vaddr : %d , as : %p at pos : %d \n ", vaddr,(void*)as,i);
 			break;
 		
 		}
@@ -680,15 +756,25 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 	if(is_swapped == true)
 	{
 		spinlock_acquire(sm_splock);
-		KASSERT(swap_map[swap_pos].vaddr == vaddr);
-		KASSERT(swap_map[swap_pos].as == as);
+	//	KASSERT(swap_map[swap_pos].vaddr == vaddr);
+	//	KASSERT(swap_map[swap_pos].as == as);
 
-		swap_map[swap_pos].vaddr = 0;
-		swap_map[swap_pos].as = NULL;
-		spinlock_release(sm_splock);
+		int i = 0;
 
-		const struct tlbshootdown tlb = {vaddr};
-		vm_tlbshootdown(&tlb);
+		for(i = 0 ; i < SWAP_MAX; i++)
+		{
+			if(swap_map[i].vaddr == vaddr && swap_map[i].as == as)
+			{
+				swap_map[swap_pos].vaddr = 0;
+				swap_map[swap_pos].as = NULL;
+				spinlock_release(sm_splock);
+				break;
+			}
+		}
+		KASSERT(i<SWAP_MAX);
+
+	//	const struct tlbshootdown tlb = {vaddr};
+	//	vm_tlbshootdown(&tlb);
 		return;
 	
 	}
@@ -897,6 +983,9 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 	if(index >= 0)
 		tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
 
+	int p = tlb_probe(vaddr,0);
+	KASSERT(p < 0);
+
 	splx(spl);
 	spinlock_release(tlb_splock);
 
@@ -994,11 +1083,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		//writing to a clean page, change page state to dirty.
 		spinlock_acquire(as->as_splock);
 
+		kprintf("why am i here \n");
 		struct page_table_entry* temp = as->as_page_list;
+	//	KASSERT(temp == NULL);
 		while(temp != NULL)
 		{
 			if(temp->vaddr == faultaddress)
 			{
+				KASSERT(temp->page_state == MAPPED);
 				set_dirty(temp->paddr);
 			//	spinlock_acuire(sm_splock);
 				clear_swap_map_entry(temp->vaddr, as);
@@ -1008,6 +1100,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			temp = temp->next;
 		
 		}
+		KASSERT(temp != NULL);
 		spinlock_release(as->as_splock);
 
 		// update the tlb.
@@ -1109,6 +1202,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			// update page_table_entry and page_state
 			page->paddr = paddr;
 			page->page_state = MAPPED;
+		//	page->swap_pos = -1;
+			clear_swap_map_entry(faultaddress,as);
 
 			// update the tlb entry. But mark it as readonly, if user attempts to write, then we can just fix the tlb entry and update page state to dirty
 
@@ -1128,8 +1223,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				elo = paddr | TLBLO_VALID;
 
 				// deliberately not setting the dirty bit.
-			/*	if(can_write == 1)
-					elo = elo | TLBLO_DIRTY;*/
+				if(can_write == 1)
+					elo = elo | TLBLO_DIRTY;
 
 				tlb_write(ehi, elo, i);
 				splx(spl);
@@ -1141,6 +1236,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			// tlb  full. use random.
 			ehi = faultaddress;
 			elo = paddr | TLBLO_VALID;
+			// deliberately not setting the dirty bit
 
 			if(can_write == 1)
 				elo = elo | TLBLO_DIRTY;
@@ -1158,7 +1254,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// tlb fault and page fault.
 	// create memory for this page
 	spinlock_release(as->as_splock);
-	paddr = get_user_page(faultaddress,false);
+	paddr = get_user_page(faultaddress,false, proc_getas());
 	spinlock_acquire(as->as_splock);
 	if(paddr == 0)
 	{

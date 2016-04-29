@@ -52,6 +52,7 @@
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
 #include <synch.h>
+#include <vm.h>
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -142,6 +143,8 @@ boot(void)
 	 */
 	COMPILE_ASSERT(sizeof(userptr_t) == sizeof(char *));
 	COMPILE_ASSERT(sizeof(*(userptr_t)0) == sizeof(char));
+
+	open_swap_disk();
 }
 
 /*

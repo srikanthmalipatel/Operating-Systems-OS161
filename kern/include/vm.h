@@ -108,7 +108,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);//, bool, struct addrspace* as);
 
-paddr_t get_user_page(vaddr_t, bool);
+paddr_t get_user_page(vaddr_t, bool, struct addrspace*);
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos);
 void free_heap(intptr_t amount);
 
@@ -118,6 +118,7 @@ void free_heap(intptr_t amount);
  * to the caller. But it should have been correct at some point in time.
  */
 unsigned int coremap_used_bytes(void);
+void open_swap_disk(void);
 
 unsigned int coremap_free_bytes(void);
 /* TLB shootdown handling called from interprocessor_interrupt */

@@ -84,6 +84,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
+//	kprintf(" **** inside as copy ****  \n");
 	spinlock_acquire(newas->as_splock);
 	spinlock_acquire(old->as_splock);
 	struct as_region* r_old = old->as_region_list;
@@ -129,7 +130,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			return ENOMEM;
 		}
 		p_new->vaddr = p_old->vaddr;
-		p_new->page_state = p_old->page_state; // FOR NOW. change this later.
 		p_new->swap_pos = -1;
 
 		KASSERT(p_old->page_state != SWAPPING);
@@ -141,6 +141,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			// Allocate a buffer at vm_bootstrap of size 4k (1 page). Use this buffer to temproarily copy data from disk to here and then to disk again
 			// then clear the buffer. This buffer is a shared resource, so we need a lock around it.
 
+			kprintf("in as_copy swap code \n");
 			spinlock_release(old->as_splock);
 			spinlock_release(newas->as_splock);
 			swap_in(p_old->vaddr,old,copy_buffer_vaddr);
@@ -157,8 +158,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		}
 		else
 		{
-
-			paddr_t paddr = get_user_page(p_new->vaddr, false);
+			KASSERT(p_old->page_state == MAPPED);
+			paddr_t paddr = get_user_page(p_new->vaddr, false, newas);
 			if(paddr == 0)
 			{
 				spinlock_release(old->as_splock);
@@ -172,6 +173,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 														// the function will translate it into a physical address again and free it. ugly Hack. but no other way.
 
 			p_new->paddr = paddr;
+			p_new->page_state = MAPPED;
         
 
 			int ret = page_list_add_node(&newas->as_page_list,p_new);
@@ -214,8 +216,10 @@ as_destroy(struct addrspace *as)
 
 		bool is_swapped = false;
 		if(cur->page_state == SWAPPED)
+		{
+		//	kprintf("as destroy , swapped is true \n");
 			is_swapped = true;
-			
+		}	
 		free_user_page(cur->vaddr,cur->paddr,as, false, is_swapped, cur->swap_pos);
 		kfree(cur);
 		cur = next;
@@ -315,7 +319,11 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	else
 		temp->can_write = 0;
 	if(executable == 1)
+	{
+		as->code_start = temp->region_base;
+		as->code_end = as->code_start + npages*PAGE_SIZE;
 		temp->can_execute = 1;
+	}
 	else
 		temp->can_execute = 0;
 	temp->configured_can_write = temp->can_write; // store this. see as_prepare_load and as_complete_load to see why this is needed

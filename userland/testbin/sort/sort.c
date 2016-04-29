@@ -181,8 +181,9 @@ check(void)
 	for (i=0; i<SIZE-1; i++) {
 		TEST161_LPROGRESS_N(i, PROGRESS_INTERVAL);
 		if (A[i] > A[i+1]) {
-			errx(1, "Failed: A[%d] is %d, A[%d] is %d",
+		errx(1, "Failed: A[%d] is %d, A[%d] is %d",
 			     i, A[i], i+1, A[i+1]);
+			//	tprintf("A[%d] : %d , A[%d] : %d \n",i,A[i],i+1,A[i+1]);
 		}
 	}
 	success(TEST161_SUCCESS, SECRET, "/testbin/sort");

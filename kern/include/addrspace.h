@@ -60,6 +60,8 @@ struct addrspace {
         paddr_t as_pbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
+        vaddr_t code_start;
+        vaddr_t code_end;
 #else
         /* Put stuff here for your VM system */
        /*
@@ -77,6 +79,8 @@ struct addrspace {
 //        vaddr_t as_stack_end;
         vaddr_t as_heap_start;
         vaddr_t as_heap_end;
+        vaddr_t code_start;
+        vaddr_t code_end;
         struct spinlock* as_splock;
         
 #endif
