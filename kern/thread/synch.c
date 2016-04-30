@@ -186,6 +186,7 @@ void
 lock_acquire(struct lock *lock)
 {
 	// Write this
+	if(lock == NULL)
     KASSERT(lock != NULL);
     KASSERT(curthread->t_in_interrupt == false);
 
@@ -208,6 +209,7 @@ lock_release(struct lock *lock)
 {
 	// Write this
     KASSERT(lock != NULL);
+    if(lock_do_i_hold(lock) == false)
     KASSERT(lock_do_i_hold(lock) == true);
     spinlock_acquire(&lock->lk_spinlock);
     lock->lk_isheld = false;

@@ -391,7 +391,7 @@ thread_bootstrap(void)
 	KASSERT(curthread->t_proc != NULL);
 	KASSERT(curthread->t_proc == kproc);
 
-	//execlock = lock_create("exec lock");
+		//execlock = lock_create("exec lock");
 
 	/* Done */
 }
@@ -1111,6 +1111,7 @@ wchan_sleep(struct wchan *wc, struct spinlock *lk)
 	KASSERT(spinlock_do_i_hold(lk));
 
 	/* must not hold other spinlocks */
+	if(curcpu->c_spinlocks != 1)
 	KASSERT(curcpu->c_spinlocks == 1);
 
 	thread_switch(S_SLEEP, wc, lk);
@@ -1250,7 +1251,7 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 	spinlock_release(&target->c_ipi_lock);
 }
 
-void ipi_tlbshootdown_broadcast(const struct tlbshootdown* mapping)
+void ipi_tlbshootdown_all_cpus(const struct tlbshootdown* mapping)
 {
 
 	unsigned i;

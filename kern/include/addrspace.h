@@ -81,7 +81,7 @@ struct addrspace {
         vaddr_t as_heap_end;
         vaddr_t code_start;
         vaddr_t code_end;
-        struct spinlock* as_splock;
+        struct lock* as_lock;
         
 #endif
 };

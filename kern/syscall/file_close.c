@@ -22,7 +22,6 @@ int sys_close(int fd)
 	if(fh == NULL)
 		return EBADF;
 
-
 	// So the fd is good, Now we work on the file handle, 
 	// Call vfs_close on the vnode held by the file handle
 	// reduce the refcount of this file handle by 1 , using a lock just in case.
@@ -34,16 +33,13 @@ int sys_close(int fd)
 	
 	if(fh->ref_count == 0)
 	{
-		
 		vfs_close(fh->file);
 		file_handle_destroy(fh);
-	
 	}
 
 	// should set this to null even if the file handle is not destroyed.
 	 curproc->t_file_table[fd] = NULL;
 
 	return 0;
-
 
 }

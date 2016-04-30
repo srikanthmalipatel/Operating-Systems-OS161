@@ -11,8 +11,6 @@
 #include <proc.h>
 int sys_dup2(int oldfd, int newfd, int* retval)
 {
-	
-
 	if(oldfd < 0 || oldfd >= OPEN_MAX)
 		return EBADF;
 	
@@ -38,7 +36,6 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 		// directly copy
 		curproc->t_file_table[newfd] = fh;
 		fh->ref_count += 1;
-	
 	}
 	else
 	{
@@ -46,15 +43,10 @@ int sys_dup2(int oldfd, int newfd, int* retval)
 		sys_close(newfd);
 		curproc->t_file_table[newfd] = fh;
 		fh->ref_count += 1;
-	
-	
 	}
 	
 	lock_release(fh->fh_lock);
 	*retval = newfd;
 	return 0;
-
-
-
 
 }

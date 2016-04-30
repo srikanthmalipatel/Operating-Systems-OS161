@@ -42,8 +42,10 @@
  * used. The cheesy hack versions in dumbvm.c are used instead.
  */
 
-extern struct spinlock* cm_splock;
+//extern struct spinlock* cm_splock;
 extern vaddr_t copy_buffer_vaddr;
+struct lock* as_lock = NULL;
+extern struct coremap_entry* coremap;
 
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -54,6 +56,14 @@ as_zero_region(paddr_t paddr, unsigned npages)
 struct addrspace *
 as_create(void)
 {
+	static bool first = true;
+	if(first == true)
+	{
+		first = false;
+		as_lock = lock_create("as lock");
+		KASSERT(as_lock != NULL);
+	}
+	
 	struct addrspace *as;
 
 	as = kmalloc(sizeof(struct addrspace));
@@ -69,8 +79,11 @@ as_create(void)
 //	as->as_stack_end = 0;
 	as->as_heap_start = 0;
 	as->as_heap_end = 0;
-	as->as_splock = kmalloc(sizeof(struct spinlock));
-	spinlock_init(as->as_splock);
+	//as->as_lock = lock_create("as lock");
+//	if(as->as_lock == NULL)
+//		return NULL;
+//	as->as_splock = kmalloc(sizeof(struct spinlock));
+//	spinlock_init(as->as_splock);
 	return as;
 }
 
@@ -85,16 +98,22 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 
 //	kprintf(" **** inside as copy ****  \n");
-	spinlock_acquire(newas->as_splock);
-	spinlock_acquire(old->as_splock);
+//	spinlock_acquire(newas->as_splock);
+//	spinlock_acquire(old->as_splock);
+//	lock_acquire(newas->as_lock);
+//	lock_acquire(old->as_lock);
+	lock_acquire(as_lock);
 	struct as_region* r_old = old->as_region_list;
 	while(r_old != NULL)
 	{
 		struct as_region* r_new = (struct as_region*)kmalloc(sizeof(struct as_region));
 		if(r_new == NULL)
 		{
-			spinlock_release(old->as_splock);
-			spinlock_release(newas->as_splock);
+			lock_release(as_lock);
+		//	lock_release(old->as_lock);
+		//	lock_release(newas->as_lock);
+			//spinlock_release(old->as_splock);
+			//spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -108,8 +127,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = region_list_add_node(&newas->as_region_list,r_new); 
 		if(ret == -1)
 		{
-			spinlock_release(old->as_splock);
-			spinlock_release(newas->as_splock);
+			lock_release(as_lock);
+			//lock_release(old->as_lock);
+			//lock_release(newas->as_lock);
+		//	spinlock_release(old->as_splock);
+		//	spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -122,9 +144,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 		if(p_new == NULL)
 		{
-			
-			spinlock_release(old->as_splock);
-			spinlock_release(newas->as_splock);
+			lock_release(as_lock);	
+		//	lock_release(old->as_lock);
+		//	lock_release(newas->as_lock);
+	//		spinlock_release(old->as_splock);
+	//		spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			
 			return ENOMEM;
@@ -133,24 +157,43 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		p_new->swap_pos = -1;
 
 		KASSERT(p_old->page_state != SWAPPING);
+		while(p_old->page_state == SWAPPING)
+		{
+	//		if(spinlock_do_i_hold(old->as_splock))
+	//			spinlock_release(old->as_splock);
+	//		if(spinlock_do_i_hold(newas->as_splock))
+	//			spinlock_release(newas->as_splock);
+
+			thread_yield();
+		
+		}
+//		if(!spinlock_do_i_hold(newas->as_splock))
+//			spinlock_acquire(newas->as_splock);
+//		if(!spinlock_do_i_hold(old->as_splock))
+//			spinlock_acquire(old->as_splock);
+
+	//	if(!spinlock_do_i_hold)
+	//	KASSERT(p_old->page_state != SWAPPING);
 
 		if(p_old->page_state == SWAPPED)
 		{
 			// this page is in disk, so we need to create a copy of that page somewhere in disk and then update the page table entry of the new process.
 			// going with the disk->memory->disk approach suggested in a recitation video by jinghao shi.
-			// Allocate a buffer at vm_bootstrap of size 4k (1 page). Use this buffer to temproarily copy data from disk to here and then to disk again
+			// Allocate a buffer at vm_bootstrap of size 4k (1 page). Use this buffer to temporarily copy data from disk to here and then to disk again
 			// then clear the buffer. This buffer is a shared resource, so we need a lock around it.
 
-			kprintf("in as_copy swap code \n");
-			spinlock_release(old->as_splock);
-			spinlock_release(newas->as_splock);
-			swap_in(p_old->vaddr,old,copy_buffer_vaddr);
+		//	kprintf("in as_copy swap code \n");
+		//	spinlock_release(old->as_splock);
+		//	spinlock_release(newas->as_splock);
+			swap_in(p_old->vaddr,old,copy_buffer_vaddr, p_old->swap_pos);
+		//	kprintf("completed swap in \n");
 			int pos = mark_swap_pos(p_new->vaddr, newas);
 			KASSERT(pos != -1);
-			int err = write_to_disk(KVADDR_TO_PADDR(copy_buffer_vaddr), pos);
+			int err = write_to_disk(KVADDR_TO_PADDR(copy_buffer_vaddr)/PAGE_SIZE, pos);
+		//	kprintf("completed writing to disk \n");
 			KASSERT(err == 0);
-			spinlock_acquire(newas->as_splock);
-			spinlock_acquire(old->as_splock);
+	//		spinlock_acquire(newas->as_splock);
+	//		spinlock_acquire(old->as_splock);
 			as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
 			p_new->page_state = SWAPPED;
 			p_new->swap_pos = pos;
@@ -159,14 +202,24 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		else
 		{
 			KASSERT(p_old->page_state == MAPPED);
-			paddr_t paddr = get_user_page(p_new->vaddr, false, newas);
+			paddr_t paddr = get_user_page(p_old->vaddr, false, newas);
+			KASSERT(p_old->page_state == MAPPED);
+		//	int spl = splhigh();
+			if(lock_do_i_hold(as_lock) == false)
+				lock_acquire(as_lock);
 			if(paddr == 0)
 			{
-				spinlock_release(old->as_splock);
-				spinlock_release(newas->as_splock);
+				lock_release(as_lock);			
+	//		lock_release(old->as_lock);
+	//		lock_release(newas->as_lock);
+//				spinlock_release(old->as_splock);
+//				spinlock_release(newas->as_splock);
 				as_destroy(newas);
 				return ENOMEM;
 			}
+			uint32_t old_index = p_old->paddr/PAGE_SIZE;
+			KASSERT(coremap[old_index].is_victim == false);
+			KASSERT(coremap[paddr/PAGE_SIZE].is_victim == false);
 			memmove((void*)PADDR_TO_KVADDR(paddr),
 				(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
 				PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
@@ -175,12 +228,16 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			p_new->paddr = paddr;
 			p_new->page_state = MAPPED;
         
+        //	splx(spl);
 
 			int ret = page_list_add_node(&newas->as_page_list,p_new);
 			if(ret == -1)
 			{
-				spinlock_release(old->as_splock);
-				spinlock_release(newas->as_splock);
+				lock_release(as_lock);			
+	//		lock_release(old->as_lock);
+	//		lock_release(newas->as_lock);
+	//			spinlock_release(old->as_splock);
+	//			spinlock_release(newas->as_splock);
 				as_destroy(newas);
 				return ENOMEM;
 			}
@@ -193,8 +250,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	newas->as_heap_end = old->as_heap_end;
 	*ret = newas;
 
-	spinlock_release(old->as_splock);
-	spinlock_release(newas->as_splock);
+
+	lock_release(as_lock);
+//	lock_release(old->as_lock);
+//	lock_release(newas->as_lock);
+//	spinlock_release(old->as_splock);
+//	spinlock_release(newas->as_splock);
 	return 0;
 }
 
@@ -204,15 +265,22 @@ as_destroy(struct addrspace *as)
 	KASSERT(as != NULL);	
 	struct page_table_entry* cur = as->as_page_list;
 	struct page_table_entry* next = NULL;
-	spinlock_acquire(as->as_splock);
+	lock_acquire(as_lock);
+//	lock_acquire(as->as_lock);
+//	spinlock_acquire(as->as_splock);
 	while(cur != NULL)
 	{
 		next = cur->next;
 		KASSERT(cur->page_state != SWAPPING);
-	/*	while(cur->page_state == SWAPPING)
+		while(cur->page_state == SWAPPING)
 		{
+		//	if(spinlock_do_i_hold(as->as_splock))
+		//		spinlock_release(as->as_splock);
 			thread_yield();
-		}*/
+		}
+
+	//	if(!spinlock_do_i_hold(as->as_splock))
+	//		spinlock_acquire(as->as_splock);
 
 		bool is_swapped = false;
 		if(cur->page_state == SWAPPED)
@@ -230,9 +298,12 @@ as_destroy(struct addrspace *as)
 	//this is straight forward though.
 	region_list_delete(&(as->as_region_list));
 	as->as_region_list = NULL;
-	spinlock_release(as->as_splock);
-	spinlock_cleanup(as->as_splock);
-	kfree(as->as_splock);
+	lock_release(as_lock);
+//	lock_release(as->as_lock);
+//	lock_destroy(as->as_lock);
+//	spinlock_release(as->as_splock);
+//	spinlock_cleanup(as->as_splock);
+//	kfree(as->as_splock);
 	kfree(as);
 }
 
