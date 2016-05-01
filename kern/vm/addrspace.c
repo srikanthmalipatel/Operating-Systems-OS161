@@ -46,6 +46,8 @@
 extern vaddr_t copy_buffer_vaddr;
 struct lock* as_lock = NULL;
 extern struct coremap_entry* coremap;
+extern bool use_big_lock;
+extern bool swapping_started;
 
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -60,8 +62,11 @@ as_create(void)
 	if(first == true)
 	{
 		first = false;
-		as_lock = lock_create("as lock");
-		KASSERT(as_lock != NULL);
+		if(use_big_lock == true && swapping_started == true)
+		{	
+			as_lock = lock_create("as lock");
+			KASSERT(as_lock != NULL);
+		}
 	}
 	
 	struct addrspace *as;
@@ -79,9 +84,12 @@ as_create(void)
 //	as->as_stack_end = 0;
 	as->as_heap_start = 0;
 	as->as_heap_end = 0;
-	//as->as_lock = lock_create("as lock");
-//	if(as->as_lock == NULL)
-//		return NULL;
+	if(use_big_lock == false && swapping_started == true)
+	{
+		as->as_lock = lock_create("as lock");
+		if(as->as_lock == NULL)
+			return NULL;
+	}
 //	as->as_splock = kmalloc(sizeof(struct spinlock));
 //	spinlock_init(as->as_splock);
 	return as;
@@ -100,18 +108,27 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 //	kprintf(" **** inside as copy ****  \n");
 //	spinlock_acquire(newas->as_splock);
 //	spinlock_acquire(old->as_splock);
-//	lock_acquire(newas->as_lock);
-//	lock_acquire(old->as_lock);
-	lock_acquire(as_lock);
+	
+	if(use_big_lock == false && swapping_started == true)
+	{
+		lock_acquire(newas->as_lock);
+		lock_acquire(old->as_lock);
+	}
+	else if(use_big_lock == true && swapping_started == true)
+		lock_acquire(as_lock);
 	struct as_region* r_old = old->as_region_list;
 	while(r_old != NULL)
 	{
 		struct as_region* r_new = (struct as_region*)kmalloc(sizeof(struct as_region));
 		if(r_new == NULL)
 		{
-			lock_release(as_lock);
-		//	lock_release(old->as_lock);
-		//	lock_release(newas->as_lock);
+			if(use_big_lock == true && swapping_started == true)
+				lock_release(as_lock);
+			else if(use_big_lock == false && swapping_started == true)
+			{	
+				lock_release(old->as_lock);
+				lock_release(newas->as_lock);
+			}	
 			//spinlock_release(old->as_splock);
 			//spinlock_release(newas->as_splock);
 			as_destroy(newas);
@@ -127,9 +144,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		int ret = region_list_add_node(&newas->as_region_list,r_new); 
 		if(ret == -1)
 		{
-			lock_release(as_lock);
-			//lock_release(old->as_lock);
-			//lock_release(newas->as_lock);
+			if(use_big_lock == true && swapping_started == true)
+				lock_release(as_lock);
+			else if(use_big_lock == false  && swapping_started == true)
+			{
+				lock_release(old->as_lock);
+				lock_release(newas->as_lock);
+			}
 		//	spinlock_release(old->as_splock);
 		//	spinlock_release(newas->as_splock);
 			as_destroy(newas);
@@ -144,9 +165,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		struct page_table_entry* p_new = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
 		if(p_new == NULL)
 		{
-			lock_release(as_lock);	
-		//	lock_release(old->as_lock);
-		//	lock_release(newas->as_lock);
+			if(use_big_lock == true && swapping_started == true)
+				lock_release(as_lock);
+			else if(use_big_lock == false && swapping_started == true)
+			{
+				lock_release(old->as_lock);
+				lock_release(newas->as_lock);
+			}
 	//		spinlock_release(old->as_splock);
 	//		spinlock_release(newas->as_splock);
 			as_destroy(newas);
@@ -194,7 +219,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			KASSERT(err == 0);
 	//		spinlock_acquire(newas->as_splock);
 	//		spinlock_acquire(old->as_splock);
-			as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
+		//	as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
 			p_new->page_state = SWAPPED;
 			p_new->swap_pos = pos;
 			p_new->paddr = 0;
@@ -205,13 +230,27 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			paddr_t paddr = get_user_page(p_old->vaddr, false, newas);
 			KASSERT(p_old->page_state == MAPPED);
 		//	int spl = splhigh();
-			if(lock_do_i_hold(as_lock) == false)
-				lock_acquire(as_lock);
+			if(use_big_lock == false && swapping_started == true)
+			{
+				if(lock_do_i_hold(newas->as_lock) == false)
+					lock_acquire(newas->as_lock);
+				if(lock_do_i_hold(old->as_lock) == false)
+					lock_acquire(newas->as_lock);
+			}
+			else if(use_big_lock == true && swapping_started == true)
+			{
+				if(lock_do_i_hold(as_lock) == false)
+					lock_acquire(as_lock);
+			}
 			if(paddr == 0)
 			{
-				lock_release(as_lock);			
-	//		lock_release(old->as_lock);
-	//		lock_release(newas->as_lock);
+				if(use_big_lock == true && swapping_started == true)
+					lock_release(as_lock);			
+				else if(use_big_lock == false && swapping_started == true)
+				{
+					lock_release(old->as_lock);
+					lock_release(newas->as_lock);
+				}
 //				spinlock_release(old->as_splock);
 //				spinlock_release(newas->as_splock);
 				as_destroy(newas);
@@ -233,16 +272,20 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			int ret = page_list_add_node(&newas->as_page_list,p_new);
 			if(ret == -1)
 			{
-				lock_release(as_lock);			
-	//		lock_release(old->as_lock);
-	//		lock_release(newas->as_lock);
+				if(use_big_lock == true && swapping_started == true)
+					lock_release(as_lock);			
+				else if(use_big_lock == false && swapping_started == true)
+				{
+					lock_release(old->as_lock);
+					lock_release(newas->as_lock);
+				}
 	//			spinlock_release(old->as_splock);
 	//			spinlock_release(newas->as_splock);
 				as_destroy(newas);
 				return ENOMEM;
 			}
-			p_old = p_old->next;
 		}
+		p_old = p_old->next;
 	
 	}
 
@@ -251,9 +294,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	*ret = newas;
 
 
-	lock_release(as_lock);
-//	lock_release(old->as_lock);
-//	lock_release(newas->as_lock);
+	if(use_big_lock == true && swapping_started == true)
+		lock_release(as_lock);
+	else if(use_big_lock == false && swapping_started == true)
+	{
+		lock_release(old->as_lock);
+		lock_release(newas->as_lock);
+	}
 //	spinlock_release(old->as_splock);
 //	spinlock_release(newas->as_splock);
 	return 0;
@@ -265,8 +312,10 @@ as_destroy(struct addrspace *as)
 	KASSERT(as != NULL);	
 	struct page_table_entry* cur = as->as_page_list;
 	struct page_table_entry* next = NULL;
-	lock_acquire(as_lock);
-//	lock_acquire(as->as_lock);
+	if(use_big_lock == true && swapping_started == true)
+		lock_acquire(as_lock);
+	else if(use_big_lock == false && swapping_started == true)
+		lock_acquire(as->as_lock);
 //	spinlock_acquire(as->as_splock);
 	while(cur != NULL)
 	{
@@ -298,9 +347,13 @@ as_destroy(struct addrspace *as)
 	//this is straight forward though.
 	region_list_delete(&(as->as_region_list));
 	as->as_region_list = NULL;
-	lock_release(as_lock);
-//	lock_release(as->as_lock);
-//	lock_destroy(as->as_lock);
+	if(use_big_lock == true && swapping_started == true)
+		lock_release(as_lock);
+	else if(use_big_lock == false && swapping_started == true)
+	{
+		lock_release(as->as_lock);
+		lock_destroy(as->as_lock);
+	}
 //	spinlock_release(as->as_splock);
 //	spinlock_cleanup(as->as_splock);
 //	kfree(as->as_splock);

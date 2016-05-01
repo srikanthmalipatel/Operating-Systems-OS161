@@ -22,11 +22,17 @@ int sys_read(int fd, userptr_t buf, int len, int* retval)
 
 	// are we using this properly?.. check jinghao's blog for example
 	// no actual use for the kern buffer, just doing this to check if memory location is valid.
-	result = copyin(buf, kern_buffer, len); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
-	if(result)
-	{
-		return result;
 
+	if(buf!= NULL)
+	{
+		result = copyin(buf, kern_buffer, len); // using this because users are stupid/malicious and can pass invalid memory addresses to the kernel.
+	
+		if(result)
+		{
+			kprintf("read copy in bad \n");
+			return result;
+
+		}
 	}
 
 	struct file_handle* fh = get_file_handle(curproc->t_file_table, fd);

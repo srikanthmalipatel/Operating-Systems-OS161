@@ -383,7 +383,18 @@ makeprocs(bool dowait)
 
 int
 main(int argc, char *argv[])
+
 {
+/*	int i;
+	const char* tmp;
+	for (i=0; i<=argc; i++) {
+		tmp = argv[i];
+	//	if (tmp==NULL) {
+	//		tmp = "[NULL]";
+	//	}
+		tprintf("argv[%d]: %s\n", i, tmp);
+	//	secprintf(SECRET, tmp, "/testbin/argtest");
+	}*/
 	bool dowait = false;
 
 	if (argc == 0) {
@@ -394,6 +405,7 @@ main(int argc, char *argv[])
 	}
 	else if (argc == 2 && !strcmp(argv[1], "-w")) {
 		dowait = true;
+	//	tprintf("inside do wait \n");
 	}
 	else {
 		tprintf("Usage: parallelvm [-w]\n");

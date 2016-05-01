@@ -44,6 +44,7 @@
 #include <uio.h>
 #include <kern/fcntl.h>
 #include <kern/stat.h>
+#include <cpu.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -86,6 +87,7 @@ vaddr_t copy_buffer_vaddr = 0;
 uint32_t last_swapped = 0;
 bool swapping_started = false;
 extern struct lock* as_lock;
+bool use_big_lock = true;
 
 const char swap_disk_name[] = "lhd0raw:";
 	void
@@ -180,119 +182,35 @@ vm_bootstrap(void)
 
 }*/
 
-static bool is_swap_candidate(uint32_t index)
+static bool is_swap_candidate(uint32_t index,vaddr_t vaddr)
 {
 	// remove the code page constraint once the bug is fixed
-	if(coremap[index].state == CLEAN && coremap[index].is_victim == false )//&& !is_code_page(coremap[index].virtual_address, coremap[index].as))
+	if(coremap[index].state == CLEAN && coremap[index].is_victim == false && coremap[index].virtual_address != vaddr)//&& !is_code_page(coremap[index].virtual_address, coremap[index].as))
 		return true;
-	
-	if(coremap[index].state == DIRTY && coremap[index].is_victim == false )//&& !is_code_page(coremap[index].virtual_address, coremap[index].as))
+//vaddr check to ensure that in as_copy we are not swapping out the old page to make space for this one.	
+	if(coremap[index].state == DIRTY && coremap[index].is_victim == false && coremap[index].virtual_address != vaddr) //&& coremap[index].as == proc_getas())//&& !is_code_page(coremap[index].virtual_address, coremap[index].as))
 		return true;
 	
 	return false;
 
 }
 
-// CHANGE THIS TO SUPPORT MULTIPLE PAGE REQUESTS
-static uint32_t get_swap_victim_index(unsigned long npages)
+// CHANGE THIS TO SUPPORT MULTIPLE PAGE REQUESTS?
+static uint32_t get_swap_victim_index(unsigned long npages, vaddr_t vaddr)
 {
+	//random page replacement algorithm
 	KASSERT(npages == 1);
+	if(use_big_lock == true && swapping_started == true)
+		spinlock_acquire(cm_splock);
 	uint32_t index = random() % coremap_count;
-	while(!is_swap_candidate(index))
+	while(!is_swap_candidate(index,vaddr))
 		index = random() % coremap_count;
 	
+	coremap[index].is_victim = true;
+	if(use_big_lock == true && swapping_started == true)
+		spinlock_release(cm_splock);
 	return index;
 
-/*	last_swapped = last_swapped % coremap_count;
-	if(npages == 1)
-	{
-
-		for(uint32_t i = last_swapped + 1 ; i < coremap_count; i++)
-		{
-			
-			if(coremap[i].state == CLEAN && coremap[i].is_victim == false )//&& !is_code_page(coremap[i].virtual_address,coremap[i].as))
-			{
-				//kprintf("got clean page 1\n");
-				last_swapped = i;
-				return i;
-			}
-		}
-
-		
-		for(uint32_t i = last_swapped + 1; i < coremap_count; i ++)
-		{	
-			
-			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)// && !is_code_page(coremap[i].virtual_address,coremap[i].as))
-			{
-			//	kprintf("got dirty page 1 \n");
-				last_swapped = i;
-				return i;
-			}
-		}
-
-		for(uint32_t i = first_free_index; i< last_swapped; i++)
-		{
-			
-			if(coremap[i].state == DIRTY && coremap[i].is_victim == false)// && !is_code_page(coremap[i].virtual_address,coremap[i].as))
-			{
-			//	kprintf("got dirty page 2 \n");
-				last_swapped = i;
-				return i;
-			}
-		
-		}
-
-
-		for(uint32_t i = first_free_index; i< last_swapped; i++)
-		{
-			if(coremap[i].state == CLEAN && coremap[i].is_victim == false)
-			{
-				kprintf("got clean page 2\n");
-				last_swapped = i;
-				return i;
-			}
-		}
-
-	}*/
-/*	else
-	{
-		// kernel asking for multiple pages,
-		// it needs contiguous pages.
-		// one option is give it any random sequence of n contiguous pages (user pages and free)
-		// another option is to iterate and find out an optimal sequence which requires the least number of swap outs.
-		
-		// this is the worst possible solution. should optimize this function
-		kprintf("**** should not be here **** \n");
-		for(uint32_t i = first_free_index; i < coremap_count; i++)
-		{
-			if((coremap[i].is_victim == false) && (coremap[i].state == FREE || coremap[i].state == CLEAN || coremap[i].state == DIRTY))
-			{
-				unsigned long p = 0;
-				uint32_t j = i + 1;
-				while((p < (npages - 1)) && j < coremap_count)
-				{
-					if((coremap[j].state == FREE || coremap[j].state == CLEAN || coremap[j].state == DIRTY)&&(coremap[j].is_victim == false))
-					{
-						p++;
-						j++;
-					}
-					else
-					{
-						break;
-					}
-				}
-				if(p == npages - 1)
-				{
-					return i;
-				}
-			
-			}
-			
-		}
-	
-	}*/
-
-//	return 0;
 }
 
 void open_swap_disk()
@@ -311,12 +229,6 @@ void open_swap_disk()
 		swapping_started = true;	
 		swap_disk_opened = true;
 
-	//	struct stat file_stats;
-	//	file_stats.st_size = 0;
-	//	result = VOP_STAT(swap_disk, &file_stats);
-	//	KASSERT(result == 0);
-	//	kprintf("disk size : %lld \n",file_stats.st_size);
-	
 	}
 
 }
@@ -350,8 +262,6 @@ int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 	spinlock_acquire(sm_splock);
 	for(int i = 0 ; i < SWAP_MAX; i++)
 	{
-	//	if(swap_map[i].vaddr == vaddr)
-	//		kprintf("found match for vaddr  %d, as  : %p \n", vaddr,(void*)as);
 		if(swap_map[i].as == as && swap_map[i].vaddr == vaddr)
 		{
 			spinlock_release(sm_splock);
@@ -367,7 +277,6 @@ int mark_swap_pos(vaddr_t vaddr, struct addrspace* as)
 			swap_map[i].vaddr = vaddr;
 			swap_map[i].as = as;
 			spinlock_release(sm_splock);
-	//		kprintf("writing vaddr : %d , index : %d\n",vaddr,i);
 			return i;
 
 		}
@@ -397,19 +306,16 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer, int swap_po
 {
 	
 //	int swap_pos = get_swap_pos(vaddr, as);
+//	int spl = splhigh();
 	KASSERT(swap_pos != -1);
-
-/*	if(is_code_page(vaddr,as))
-		kprintf("bringing back code page \n");*/
 
 	vaddr_t virtual_address;
 	if(buffer == 0) // we dont have a target buffer already, so allocate a page here.
 	{
 		paddr_t paddr = get_user_page(vaddr,true,as);
-	//	kprintf("swap in got page : %d \n", paddr/PAGE_SIZE);
 		KASSERT(paddr != 0);
 		paddr = paddr & PAGE_FRAME;
-		as_zero_region(paddr,1);
+		//as_zero_region(paddr,1);
 		virtual_address = PADDR_TO_KVADDR(paddr);
 	}
 	else
@@ -429,13 +335,13 @@ paddr_t swap_in(vaddr_t vaddr, struct addrspace* as, vaddr_t buffer, int swap_po
 //	splx(spl);
 	KASSERT(result == 0);
 	KASSERT(uio.uio_resid == 0);
-//	kprintf("read vaddr : %d , as : %p, from pos : %d\n",vaddr,(void*)as,swap_pos);
 
 /*	spinlock_acquire(sm_splock);
 	swap_map[swap_pos].as = NULL;
 	swap_map[swap_pos].vaddr = 0;
 	spinlock_release(sm_splock);
 */
+//	splx(spl);
 	return KVADDR_TO_PADDR(virtual_address);
 
 }
@@ -447,19 +353,19 @@ static int swap_out(uint32_t victim)
 	bool is_clean = false;
 	if(coremap[victim].state == CLEAN)
 		is_clean= true;
+	KASSERT(is_clean == false);
 
-	// shootdown tlb entry for this victim, also we need to do something to the page table entry to mark it from being used.
+	// shootdown tlb entry for this victim
 	vaddr_t victim_vaddr = coremap[victim].virtual_address;
 	struct addrspace* victim_as = coremap[victim].as;
-/*	if(is_code_page(victim_vaddr, victim_as))
-		kprintf("evicting code page \n");*/
 
 	KASSERT(coremap[victim].is_victim == true);
 
 	// shooting down tlb entry. SHOOTDOWN ON ALL CPUs?
-	const struct tlbshootdown tlb = {victim_vaddr};
+//	const struct tlbshootdown tlb = {victim_vaddr};
 //	vm_tlbshootdown(&tlb);
-	ipi_tlbshootdown_all_cpus(&tlb);
+	//ipi_tlbshootdown_all_cpus(&tlb);
+	ipi_broadcast(IPI_TLBSHOOTDOWN);
 
 	if(is_clean == false)
 	{
@@ -468,15 +374,19 @@ static int swap_out(uint32_t victim)
 		KASSERT(pos != -1); // swapmap is full
 
 		// mark the page as swapping, will be used in vm_fault to check if swapping is going on
-	//	if(spinlock_do_i_hold(victim_as->as_splock) == false)
-	//		spinlock_acquire(victim_as->as_splock);
+	//	spinlock_release(cm_splock);
+		if(use_big_lock == true && swapping_started == true)
+		{
+			KASSERT(lock_do_i_hold(as_lock) == true);
+			if(lock_do_i_hold(as_lock) == false)
+				lock_acquire(as_lock);
+		}
+		else if(use_big_lock == false && swapping_started == true)
+		{
+			if(lock_do_i_hold(victim_as->as_lock) == false)
+				lock_acquire(victim_as->as_lock);
 
-		spinlock_release(cm_splock);
-	//	KASSERT(lock_do_i_hold(as_lock) == true);
-		if(lock_do_i_hold(as_lock) == false)
-			lock_acquire(as_lock);
-	//	if(lock_do_i_hold(victim_as->as_lock) == false)
-	//		lock_acquire(victim_as->as_lock);
+		}
 
 		struct page_table_entry* pt_entry = victim_as->as_page_list;
 		KASSERT(victim_as != NULL);
@@ -494,24 +404,20 @@ static int swap_out(uint32_t victim)
 		}
 
 		KASSERT(pt_entry != NULL);
-	//	spinlock_release(victim_as->as_splock);
-//		lock_rlease(victim_as->as_lock);
-		// release the cm_spinlock
-	//	spinlock_release(cm_splock);
+		if(use_big_lock == false && swapping_started == true)
+		KASSERT(lock_do_i_hold(victim_as->as_lock));
 
-		// check if we can sleep
 		vm_can_sleep();
-		// do the actual swap out to the position.
-	//	kprintf("calling write \n");
 		int err = write_to_disk(victim, pos);
-	//	kprintf("wrote vaddr : %d ,as : %p to pos : %d \n",victim_vaddr,(void *)victim_as,pos);
 		KASSERT(err == 0);
-		KASSERT(lock_do_i_hold(as_lock) == true);
 
+		if(use_big_lock == true && swapping_started == true)
+			KASSERT(lock_do_i_hold(as_lock) == true);
+		
+		if(use_big_lock == false && swapping_started == true)
+			KASSERT(lock_do_i_hold(victim_as->as_lock) == true);
 
 		// update the page table entry of the owner of the victim,i.e., tell it that this page has been swapped out.
-	//	lock_acquire()
-//		spinlock_acquire(victim_as->as_splock);
 		KASSERT(pt_entry->vaddr == victim_vaddr);
 		if(pt_entry->page_state != SWAPPING)
 			kprintf("page state is %d \n", pt_entry->page_state);
@@ -520,37 +426,6 @@ static int swap_out(uint32_t victim)
 		pt_entry->swap_pos = pos;
 		pt_entry->paddr = 0;
 
-	//	lock_release(as_lock);
-	//	lock_release(victim_as->as_lock);
-	//	spinlock_release(victim_as->as_splock);
-		spinlock_acquire(cm_splock);
-	}
-	else
-	{
-		// already a clean page, so just mark it as swapped.
-		//spinlock_acquire(victim_as->as_splock);
-	//	lock_acquire(victim_as->as_lock);
-		kprintf(" should not be here at all \n");
-		lock_acquire(as_lock);
-		struct page_table_entry* pt_entry = victim_as->as_page_list;
-		KASSERT(victim_as != NULL);
-
-		while(pt_entry != NULL)
-		{
-			if(pt_entry->vaddr == victim_vaddr)
-			{
-				KASSERT(pt_entry->page_state == MAPPED);
-				pt_entry->page_state = SWAPPED;
-				pt_entry->paddr = 0;
-				break;
-			}
-			pt_entry = pt_entry->next;
-		}
-
-		KASSERT(pt_entry != NULL);
-		lock_release(as_lock);
-//		lock_release(victim_as->as_lock);
-	//	spinlock_release(victim_as->as_splock);
 	}
 
 	return 0;
@@ -577,8 +452,6 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 			addr = 0;
 		else
 		{
-		//	if(cm_lock != NULL)
-		//	lock_acquire(cm_lock);
 			spinlock_acquire(cm_splock);
 			for(uint32_t i = first_free_index; i < coremap_count; i++)
 			{
@@ -612,10 +485,7 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 							// No. kernel threads can call kmalloc, set owner as current process. So can be dirty, just need to check if it is kernel to set FIXED.
 							if(is_user_page == true)
 							{
-								/*if(is_swap_in == true)
-									coremap[k].state = CLEAN;
-								else*/
-									coremap[k].state = DIRTY;
+								coremap[k].state = DIRTY;
 								coremap[k].virtual_address = vaddr;
 								coremap[k].as = as;
 								coremap[k].is_victim = false;
@@ -633,8 +503,6 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 					}
 				}
 			}
-		//	if(cm_lock != NULL)
-		//	lock_release(cm_lock);
 			spinlock_release(cm_splock);
 		}
 
@@ -651,20 +519,47 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 	{
 		// no free page, need to swap out a user page
 		// acquire coremap spinlock
-	//	if(is_user_page == true)
-	//	kprintf("need page for vaddr : %d, as : %p \n", vaddr, (void *)as);
+
+
+	/*	bool already_held =false;
+		if(use_big_lock == true && swapping_started == true)
+		{
+			if(lock_do_i_hold(as_lock) == false)
+				lock_acquire(as_lock);
+			else
+				already_held = true;
+		}*/
 		vm_can_sleep();
-		spinlock_acquire(cm_splock);
+	//	spinlock_acquire(cm_splock);
 		KASSERT(npages == 1);
 		
-	//	for(uint32_t i = first_free_index; i < coremap_count; i++)
-	//		KASSERT(coremap[i].state != FREE);
-
 		// select a candidate and mark it as victim
-		uint32_t victim = get_swap_victim_index(npages);
+
+		uint32_t victim = get_swap_victim_index(npages,vaddr);
 	//	kprintf("got victim : %d \n", victim);
 		KASSERT(victim != 0);
+		struct addrspace* victim_as = coremap[victim].as;
+	//	bool already_held = false;
+	
+		bool already_held =false;
+		if(use_big_lock == true && swapping_started == true)
+		{
+			if(lock_do_i_hold(as_lock) == false)
+				lock_acquire(as_lock);
+			else
+				already_held = true;
+		}
 
+		if(use_big_lock == false && swapping_started == true)
+		{
+			if(lock_do_i_hold(victim_as->as_lock) == false)
+				lock_acquire(victim_as->as_lock);
+			else
+				already_held = true;
+		}
+
+	//	spinlock_acquire(cm_splock);
+		
 		for(uint32_t i = victim; i < victim + npages; i++)
 		{
 			KASSERT(coremap[i].state != FIXED);
@@ -673,7 +568,7 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 		}
 
 
-		// swap out
+		// swap t
 		for(uint32_t i = victim; i < victim + npages; i++)
 		{
 			if(coremap[i].state != FREE)
@@ -683,14 +578,11 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 			}
 		}
 
-
+		spinlock_acquire(cm_splock);
 		//give this new page to whoever asked for it.
 		if(is_user_page == true)
 		{
-		/*	if(is_swap_in == true)
-				coremap[victim].state = CLEAN;
-			else*/
-				coremap[victim].state = DIRTY;
+			coremap[victim].state = DIRTY;
 			coremap[victim].chunks = 1;
 			coremap[victim].virtual_address = vaddr;
 			coremap[victim].as = as;
@@ -714,7 +606,19 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 		}
 
 		addr = victim*PAGE_SIZE;
-	//	lock_release(cm_lock);
+
+		if(use_big_lock == true && swapping_started == true)
+		{
+		//	if(already_held == false)
+		//	KASSERT(already_held == true);
+			if(already_held == false)
+				lock_release(as_lock);
+		}
+		if(use_big_lock == false && swapping_started == true)
+		{
+			if(already_held == false)
+				lock_release(victim_as->as_lock);
+		}
 		spinlock_release(cm_splock);
 	}
 
@@ -737,10 +641,13 @@ alloc_kpages(unsigned npages)
 }
 
 paddr_t get_user_page(vaddr_t vaddr, bool is_swap_in, struct addrspace* as)
+
 {
+//	int spl = splhigh();
 	paddr_t pa;
 	pa = getppages(1,true,vaddr,is_swap_in, as);
 	return pa;
+//	splx(spl);
 }
 
 
@@ -767,7 +674,7 @@ static void clear_swap_map_entry(vaddr_t vaddr, struct addrspace* as, int swap_p
 }
 void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free_node, bool is_swapped, int swap_pos)
 {
-
+	(void)vaddr;
 	if(is_swapped == true)
 	{
 		spinlock_acquire(sm_splock);
@@ -815,10 +722,10 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 	coremap[page_index].as = NULL;
 
 	spinlock_release(cm_splock);
-	const struct tlbshootdown tlb = {vaddr};
+//	const struct tlbshootdown tlb = {vaddr};
 //	vm_tlbshootdown(&tlb);
-	ipi_tlbshootdown_all_cpus(&tlb);
-
+//	ipi_tlbshootdown_all_cpus(&tlb);
+	ipi_broadcast(IPI_TLBSHOOTDOWN);
 
 	if(free_node == true)
 	{
@@ -861,10 +768,21 @@ void free_heap(intptr_t amount)
 	KASSERT(as!= NULL);
 	KASSERT(amount < 0);
 	
-	if(lock_do_i_hold(as_lock) == false)
-	lock_acquire(as_lock);
-//	lock_acquire(as->as_lock);
-//	spinlock_acquire(as->as_splock);
+	bool already_held = false;
+	if(use_big_lock == false && swapping_started == true)
+	{
+		if(lock_do_i_hold(as->as_lock) == false)
+			lock_acquire(as->as_lock);
+		else
+			already_held = true;
+	}
+	else if(use_big_lock == true && swapping_started == true)
+	{
+		if(lock_do_i_hold(as_lock) == false)
+		lock_acquire(as_lock);
+	else
+		already_held = true;
+	}
 	intptr_t heap_end = as->as_heap_end;
 
 	intptr_t chunk_start = as->as_heap_end + amount; //amount is -ve.
@@ -901,9 +819,16 @@ void free_heap(intptr_t amount)
 
 		temp = next;
 	}
-	lock_release(as_lock);
-//	lock_release(as->as_lock);
-//	spinlock_release(as->as_splock);
+	if(use_big_lock == true && swapping_started == true)
+	{
+		if(already_held == false)
+			lock_release(as_lock);
+	}
+	else if(use_big_lock == false && swapping_started == true)
+	{
+		if(already_held == false)
+			lock_release(as->as_lock);
+	}
 
 }
 
@@ -974,9 +899,9 @@ coremap_used_bytes() {
 //	lock_release(cm_lock);
 	spinlock_release(cm_splock);
 	if(as_lock == NULL)
-	return (coremap_count-count)*PAGE_SIZE;
+		return (coremap_count-count)*PAGE_SIZE;
 	else
-	return (coremap_count-count)*PAGE_SIZE - 80 ;
+		return (coremap_count-count)*PAGE_SIZE - 80 ;
 }
 
 unsigned int coremap_free_bytes()
@@ -1160,10 +1085,31 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t page_state = 99;
 	struct page_table_entry* page = as->as_page_list;
 
-	if(lock_do_i_hold(as_lock) == false)
-	lock_acquire(as_lock);
-//	lock_acquire(as->as_lock);
-//	spinlock_acquire(as->as_splock);
+	bool already_held = false;
+	bool held_now = false;
+
+	if(use_big_lock == false && swapping_started == true)
+	{
+		if(lock_do_i_hold(as->as_lock) == false)
+		{
+			lock_acquire(as->as_lock);
+			held_now = true;
+		}
+		else
+			already_held = true;
+	}
+	else if(use_big_lock == true && swapping_started == true)
+	{
+		if(lock_do_i_hold(as_lock) == false)
+		{
+			lock_acquire(as_lock);
+			held_now = true;
+	
+		}
+		else
+			already_held = true;
+	}
+
 	while(page != NULL)
 	{
 
@@ -1218,9 +1164,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				tlb_write(ehi, elo, i);
 				splx(spl);
 				spinlock_release(tlb_splock);
-				lock_release(as_lock);
-			//	lock_release(as->as_lock);
-			//	spinlock_release(as->as_splock);
+				if(already_held == false || held_now == true)
+				{
+					if(use_big_lock == true && swapping_started == true)
+						lock_release(as_lock);
+					else if(use_big_lock == false && swapping_started == true)
+						lock_release(as->as_lock);
+				
+				}
 				return 0;
 			}
 
@@ -1234,9 +1185,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			tlb_random(ehi, elo);
 			splx(spl);
 			spinlock_release(tlb_splock);
-			lock_release(as_lock);
-		//	lock_release(as->as_lock);
-		//	spinlock_release(as->as_splock);
+	
+			if(already_held == false || held_now == true)
+			{
+				if(use_big_lock == true && swapping_started == true)
+					lock_release(as_lock);
+				else if(use_big_lock == false && swapping_started == true)
+					lock_release(as->as_lock);
+				
+			}
 			return 0;
 		}
 		else if(page_state == SWAPPED)
@@ -1244,12 +1201,35 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		//	spinlock_release(as->as_splock);
 			// this page is swapped out. Bring it back into memory
 			vm_can_sleep();
+			if(use_big_lock == false && swapping_started == true)
+			{
+				if(held_now == true)
+				lock_release(as->as_lock);
+			}
 			paddr_t paddr = swap_in(faultaddress,as,0,page->swap_pos);
 		//	spinlock_acquire(as->as_splock);
-		//	if(lock_do_i_hold(as->as_lock) == false)
-		//		lock_acquire(as->as_lock);
-			if(lock_do_i_hold(as_lock) == false)
-				lock_acquire(as_lock);
+			bool already_held = false;
+			if(use_big_lock == false && swapping_started == true)
+			{
+				if(lock_do_i_hold(as->as_lock) == false)
+				{	
+					held_now = true;
+					lock_acquire(as->as_lock);
+				}
+			
+				else
+					already_held = true;
+			}
+			else if(use_big_lock == true && swapping_started == true)
+			{
+				if(lock_do_i_hold(as_lock) == false)
+				{	
+					held_now = true;
+					lock_acquire(as_lock);
+				}
+				else
+					already_held = true;
+			}
 			// update page_table_entry and page_state
 			page->paddr = paddr;
 			page->page_state = MAPPED;
@@ -1274,23 +1254,28 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 				ehi = faultaddress;
 				elo = paddr | TLBLO_VALID;
 
-				// deliberately not setting the dirty bit.
 				if(can_write == 1)
 					elo = elo | TLBLO_DIRTY;
 
 				tlb_write(ehi, elo, i);
 				splx(spl);
 				spinlock_release(tlb_splock);
-				lock_release(as_lock);
-			//	lock_release(as->as_lock);
-			//	spinlock_release(as->as_splock);
+
+				if(already_held == false || held_now == true)
+				{
+					if(use_big_lock == true && swapping_started == true)
+						lock_release(as_lock);
+					else if(use_big_lock == false && swapping_started == true)
+						lock_release(as->as_lock);
+				
+				}
+
 				return 0;
 			}
 
 			// tlb  full. use random.
 			ehi = faultaddress;
 			elo = paddr | TLBLO_VALID;
-			// deliberately not setting the dirty bit
 
 			if(can_write == 1)
 				elo = elo | TLBLO_DIRTY;
@@ -1298,9 +1283,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			tlb_random(ehi, elo);
 			splx(spl);
 			spinlock_release(tlb_splock);
-			lock_release(as_lock);
-		//	lock_release(as->as_lock);
-		//	spinlock_release(as->as_splock);
+
+			if(already_held == false || held_now == true)
+			{
+				if(use_big_lock == true && swapping_started == true)
+					lock_release(as_lock);
+				else if(use_big_lock == false && swapping_started == true)
+					lock_release(as->as_lock);
+				
+			}
 			return 0;
 
 		}
@@ -1309,30 +1300,50 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// tlb fault and page fault.
 	// create memory for this page
-//	spinlock_release(as->as_splock);
+	if(use_big_lock == false && swapping_started == true)
+	{
+		if(held_now == true)
+		lock_release(as->as_lock);
+	}
+	
 	paddr = get_user_page(faultaddress,false, proc_getas());
-//	spinlock_acquire(as->as_splock);
-//	if(lock_do_i_hold(as->as_lock) == false)
-//		lock_acquire(as->as_lock);
+//	already_held = false;
+	if(use_big_lock == false && swapping_started == true)
+	{
+		if(lock_do_i_hold(as->as_lock) == false)
+		{	
+			lock_acquire(as->as_lock);
+			held_now = true;
+		}
+		else
+			already_held = true;
+	}
 
-	if(lock_do_i_hold(as_lock) == false)
-		lock_acquire(as_lock);
+	if(use_big_lock == true  && swapping_started == true)
+	{
+		if(lock_do_i_hold(as_lock) == false)
+		{	
+			lock_acquire(as_lock);
+			held_now = true;
+		}
+		else
+			already_held = true;
+	}
+
+	
+
 	if(paddr == 0)
 	{
-		lock_release(as_lock);
-	//	lock_release(as->as_lock);
-	//	spinlock_release(as->as_splock);
+		if(already_held == false)
+		//	lock_release(as->as_lock);
+			lock_release(as->as_lock);
 		return ENOMEM;
 	}
 	as_zero_region(paddr,1);
 
 	//create a page table entry for this page.
-//	if(spinlock_do_i_hold(as->as_splock))
-//		spinlock_release(as->as_splock);
 	
 	struct page_table_entry* p = (struct page_table_entry*)kmalloc(sizeof(struct page_table_entry));
-//	if(!spinlock_do_i_hold(as->as_splock))
-//		spinlock_acquire(as->as_splock);
 	p->vaddr = faultaddress;
 	p->paddr = paddr;
 	p->page_state = MAPPED;
@@ -1340,15 +1351,18 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
-//	if(spinlock_do_i_hold(as->as_splock) == true)
-//	spinlock_release(as->as_splock);
-//	if(lock_do_i_hold(as->as_lock))
-//		lock_release(as->as_lock);
-	if(lock_do_i_hold(as_lock))
-		lock_release(as_lock);
+
+	if(already_held == false || held_now == true)
+	{
+		if(use_big_lock == true && swapping_started == true)
+			lock_release(as_lock);
+		else if(use_big_lock == false && swapping_started == true)
+			lock_release(as->as_lock);
+				
+	}
 	if(i == -1)
 	{
-	//	lock_release(as->as_lock);
+		lock_release(as->as_lock);
 		return ENOMEM;
 	}
 	// now add this to the TLB.

@@ -15,8 +15,8 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 	if(fd < 0 || fd > OPEN_MAX )
 		return EBADF; 
 
-	if(buf == NULL) // does VOP_WRITE take care of this for us.?
-		return EFAULT;
+//	if(buf == NULL) // does VOP_WRITE take care of this for us.?
+//		return EFAULT;
 
 // recitation slides ask us to use copyin/out to check if this pointer is valid, so i guess that VOP_WRITE does not do it for us.
 	
@@ -65,6 +65,7 @@ int sys_write(int fd, const userptr_t buf, size_t nBytes, int* retval)
 
 	result = VOP_WRITE(fh->file, &u);
 	if (result) {
+		kprintf("write bad \n");
 		lock_release(fh->fh_lock);
 		return result;
 	}

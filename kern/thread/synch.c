@@ -39,6 +39,7 @@
 #include <thread.h>
 #include <current.h>
 #include <synch.h>
+#include <spl.h>
 
 ////////////////////////////////////////////////////////////
 //
@@ -189,6 +190,7 @@ lock_acquire(struct lock *lock)
 	if(lock == NULL)
     KASSERT(lock != NULL);
     KASSERT(curthread->t_in_interrupt == false);
+    int spl = splhigh();
 
     // current thread should not try to acquire the lock again
    // KASSERT(lock->lk_curthread != curthread);
@@ -201,6 +203,7 @@ lock_acquire(struct lock *lock)
     lock->lk_isheld = true;
     lock->lk_curthread = curthread;
     spinlock_release(&lock->lk_spinlock);
+    splx(spl);
 	//(void)lock;  // suppress warning until code gets written
 }
 
