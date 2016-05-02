@@ -47,15 +47,18 @@ extern vaddr_t copy_buffer_vaddr;
 struct lock* as_lock = NULL;
 extern struct coremap_entry* coremap;
 extern bool use_big_lock;
+extern bool use_small_lock;
+extern bool use_page_lock;
 extern bool swapping_started;
+extern struct coremap_entry* coremap;
 
-void
+	void
 as_zero_region(paddr_t paddr, unsigned npages)
 {
 	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
 }
 
-struct addrspace *
+	struct addrspace *
 as_create(void)
 {
 	static bool first = true;
@@ -68,7 +71,7 @@ as_create(void)
 			KASSERT(as_lock != NULL);
 		}
 	}
-	
+
 	struct addrspace *as;
 
 	as = kmalloc(sizeof(struct addrspace));
@@ -81,21 +84,21 @@ as_create(void)
 	 */
 	as->as_page_list = NULL;
 	as->as_region_list = NULL;
-//	as->as_stack_end = 0;
+	//	as->as_stack_end = 0;
 	as->as_heap_start = 0;
 	as->as_heap_end = 0;
-	if(use_big_lock == false && swapping_started == true)
+	if(use_small_lock == true && swapping_started == true)
 	{
 		as->as_lock = lock_create("as lock");
 		if(as->as_lock == NULL)
 			return NULL;
 	}
-//	as->as_splock = kmalloc(sizeof(struct spinlock));
-//	spinlock_init(as->as_splock);
+	//	as->as_splock = kmalloc(sizeof(struct spinlock));
+	//	spinlock_init(as->as_splock);
 	return as;
 }
 
-int
+	int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
@@ -105,11 +108,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-//	kprintf(" **** inside as copy ****  \n");
-//	spinlock_acquire(newas->as_splock);
-//	spinlock_acquire(old->as_splock);
-	
-	if(use_big_lock == false && swapping_started == true)
+	//	kprintf(" **** inside as copy ****  \n");
+	//	spinlock_acquire(newas->as_splock);
+	//	spinlock_acquire(old->as_splock);
+
+	if(use_small_lock == true && swapping_started == true)
 	{
 		lock_acquire(newas->as_lock);
 		lock_acquire(old->as_lock);
@@ -124,7 +127,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		{
 			if(use_big_lock == true && swapping_started == true)
 				lock_release(as_lock);
-			else if(use_big_lock == false && swapping_started == true)
+			else if(use_small_lock == true && swapping_started == true)
 			{	
 				lock_release(old->as_lock);
 				lock_release(newas->as_lock);
@@ -146,13 +149,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		{
 			if(use_big_lock == true && swapping_started == true)
 				lock_release(as_lock);
-			else if(use_big_lock == false  && swapping_started == true)
+			else if(use_small_lock == true  && swapping_started == true)
 			{
 				lock_release(old->as_lock);
 				lock_release(newas->as_lock);
 			}
-		//	spinlock_release(old->as_splock);
-		//	spinlock_release(newas->as_splock);
+			//	spinlock_release(old->as_splock);
+			//	spinlock_release(newas->as_splock);
 			as_destroy(newas);
 			return ENOMEM;
 		}
@@ -167,15 +170,15 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		{
 			if(use_big_lock == true && swapping_started == true)
 				lock_release(as_lock);
-			else if(use_big_lock == false && swapping_started == true)
+			else if(use_small_lock == true && swapping_started == true)
 			{
 				lock_release(old->as_lock);
 				lock_release(newas->as_lock);
 			}
-	//		spinlock_release(old->as_splock);
-	//		spinlock_release(newas->as_splock);
+			//		spinlock_release(old->as_splock);
+			//		spinlock_release(newas->as_splock);
 			as_destroy(newas);
-			
+
 			return ENOMEM;
 		}
 		p_new->vaddr = p_old->vaddr;
@@ -184,21 +187,92 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		KASSERT(p_old->page_state != SWAPPING);
 		while(p_old->page_state == SWAPPING)
 		{
-	//		if(spinlock_do_i_hold(old->as_splock))
-	//			spinlock_release(old->as_splock);
-	//		if(spinlock_do_i_hold(newas->as_splock))
-	//			spinlock_release(newas->as_splock);
 
 			thread_yield();
-		
-		}
-//		if(!spinlock_do_i_hold(newas->as_splock))
-//			spinlock_acquire(newas->as_splock);
-//		if(!spinlock_do_i_hold(old->as_splock))
-//			spinlock_acquire(old->as_splock);
 
-	//	if(!spinlock_do_i_hold)
-	//	KASSERT(p_old->page_state != SWAPPING);
+		}
+
+		//	if(!spinlock_do_i_hold)
+		//	KASSERT(p_old->page_state != SWAPPING);
+
+		if(p_old->page_state == MAPPED)
+		{
+			if(use_page_lock == true && swapping_started == true)
+				lock_acquire(coremap[(p_old->paddr)/PAGE_SIZE].page_lock);
+
+			if(p_old->page_state == MAPPED)
+			{
+				paddr_t paddr = get_user_page(p_old->vaddr, false, newas);
+				KASSERT(p_old->page_state == MAPPED);
+				//	int spl = splhigh();
+				if(use_small_lock == true && swapping_started == true)
+				{
+					if(lock_do_i_hold(newas->as_lock) == false)
+						lock_acquire(newas->as_lock);
+					if(lock_do_i_hold(old->as_lock) == false)
+						lock_acquire(newas->as_lock);
+				}
+				else if(use_big_lock == true && swapping_started == true)
+				{
+					if(lock_do_i_hold(as_lock) == false)
+						lock_acquire(as_lock);
+				}
+				if(paddr == 0)
+				{
+					if(use_big_lock == true && swapping_started == true)
+						lock_release(as_lock);			
+					else if(use_small_lock == true && swapping_started == true)
+					{
+						lock_release(old->as_lock);
+						lock_release(newas->as_lock);
+					}
+					//				spinlock_release(old->as_splock);
+					//				spinlock_release(newas->as_splock);
+					as_destroy(newas);
+					return ENOMEM;
+				}
+				uint32_t old_index = p_old->paddr/PAGE_SIZE;
+				KASSERT(coremap[old_index].is_victim == false);
+				KASSERT(coremap[paddr/PAGE_SIZE].is_victim == false);
+				memmove((void*)PADDR_TO_KVADDR(paddr),
+						(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
+						PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
+				// the function will translate it into a physical address again and free it. ugly Hack. but no other way.
+
+				p_new->paddr = paddr;
+				p_new->page_state = MAPPED;
+
+				//	splx(spl);
+
+				int ret = page_list_add_node(&newas->as_page_list,p_new);
+				if(ret == -1)
+				{
+					if(use_big_lock == true && swapping_started == true)
+						lock_release(as_lock);			
+					else if(use_small_lock == true && swapping_started == true)
+					{
+						lock_release(old->as_lock);
+						lock_release(newas->as_lock);
+					}
+					//			spinlock_release(old->as_splock);
+					//			spinlock_release(newas->as_splock);
+					as_destroy(newas);
+					return ENOMEM;
+				}
+
+				if(use_page_lock == true && swapping_started == true)
+				{
+					
+					if(lock_do_i_hold(coremap[paddr/PAGE_SIZE].page_lock) == true)
+					lock_release(coremap[paddr/PAGE_SIZE].page_lock);
+
+
+					if(lock_do_i_hold(coremap[(p_old->paddr/PAGE_SIZE)].page_lock) == true)
+					lock_release(coremap[(p_old->paddr/PAGE_SIZE)].page_lock);
+				}
+
+			}
+		}
 
 		if(p_old->page_state == SWAPPED)
 		{
@@ -207,86 +281,33 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			// Allocate a buffer at vm_bootstrap of size 4k (1 page). Use this buffer to temporarily copy data from disk to here and then to disk again
 			// then clear the buffer. This buffer is a shared resource, so we need a lock around it.
 
-		//	kprintf("in as_copy swap code \n");
-		//	spinlock_release(old->as_splock);
-		//	spinlock_release(newas->as_splock);
+			//	kprintf("in as_copy swap code \n");
+			//	spinlock_release(old->as_splock);
+			//	spinlock_release(newas->as_splock);
 			swap_in(p_old->vaddr,old,copy_buffer_vaddr, p_old->swap_pos);
-		//	kprintf("completed swap in \n");
+			//	kprintf("completed swap in \n");
 			int pos = mark_swap_pos(p_new->vaddr, newas);
 			KASSERT(pos != -1);
 			int err = write_to_disk(KVADDR_TO_PADDR(copy_buffer_vaddr)/PAGE_SIZE, pos);
-		//	kprintf("completed writing to disk \n");
+			//	kprintf("completed writing to disk \n");
 			KASSERT(err == 0);
-	//		spinlock_acquire(newas->as_splock);
-	//		spinlock_acquire(old->as_splock);
-		//	as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
+			//		spinlock_acquire(newas->as_splock);
+			//		spinlock_acquire(old->as_splock);
+			//	as_zero_region(KVADDR_TO_PADDR(copy_buffer_vaddr),1);
 			p_new->page_state = SWAPPED;
 			p_new->swap_pos = pos;
 			p_new->paddr = 0;
-		}
-		else
-		{
-			KASSERT(p_old->page_state == MAPPED);
-			paddr_t paddr = get_user_page(p_old->vaddr, false, newas);
-			KASSERT(p_old->page_state == MAPPED);
-		//	int spl = splhigh();
-			if(use_big_lock == false && swapping_started == true)
-			{
-				if(lock_do_i_hold(newas->as_lock) == false)
-					lock_acquire(newas->as_lock);
-				if(lock_do_i_hold(old->as_lock) == false)
-					lock_acquire(newas->as_lock);
-			}
-			else if(use_big_lock == true && swapping_started == true)
-			{
-				if(lock_do_i_hold(as_lock) == false)
-					lock_acquire(as_lock);
-			}
-			if(paddr == 0)
-			{
-				if(use_big_lock == true && swapping_started == true)
-					lock_release(as_lock);			
-				else if(use_big_lock == false && swapping_started == true)
-				{
-					lock_release(old->as_lock);
-					lock_release(newas->as_lock);
-				}
-//				spinlock_release(old->as_splock);
-//				spinlock_release(newas->as_splock);
-				as_destroy(newas);
-				return ENOMEM;
-			}
-			uint32_t old_index = p_old->paddr/PAGE_SIZE;
-			KASSERT(coremap[old_index].is_victim == false);
-			KASSERT(coremap[paddr/PAGE_SIZE].is_victim == false);
-			memmove((void*)PADDR_TO_KVADDR(paddr),
-				(const void *)PADDR_TO_KVADDR(p_old->paddr), //use this? or PADDR_TO_KVADDR like dumbvm does?. But why does dumbvm do that in the first place.
-				PAGE_SIZE);									// i know why, cannot call functions on user memory addresses. So convert it into a kv address.
-														// the function will translate it into a physical address again and free it. ugly Hack. but no other way.
 
-			p_new->paddr = paddr;
-			p_new->page_state = MAPPED;
-        
-        //	splx(spl);
 
-			int ret = page_list_add_node(&newas->as_page_list,p_new);
-			if(ret == -1)
+			if(use_page_lock == true && swapping_started == true)
 			{
-				if(use_big_lock == true && swapping_started == true)
-					lock_release(as_lock);			
-				else if(use_big_lock == false && swapping_started == true)
-				{
-					lock_release(old->as_lock);
-					lock_release(newas->as_lock);
-				}
-	//			spinlock_release(old->as_splock);
-	//			spinlock_release(newas->as_splock);
-				as_destroy(newas);
-				return ENOMEM;
+					
+				if(lock_do_i_hold(coremap[(p_old->paddr/PAGE_SIZE)].page_lock) == true)
+					lock_release(coremap[(p_old->paddr/PAGE_SIZE)].page_lock);
 			}
 		}
 		p_old = p_old->next;
-	
+
 	}
 
 	newas->as_heap_start = old->as_heap_start;
@@ -296,17 +317,17 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
 	if(use_big_lock == true && swapping_started == true)
 		lock_release(as_lock);
-	else if(use_big_lock == false && swapping_started == true)
+	else if(use_small_lock == true && swapping_started == true)
 	{
 		lock_release(old->as_lock);
 		lock_release(newas->as_lock);
 	}
-//	spinlock_release(old->as_splock);
-//	spinlock_release(newas->as_splock);
+	//	spinlock_release(old->as_splock);
+	//	spinlock_release(newas->as_splock);
 	return 0;
 }
 
-void
+	void
 as_destroy(struct addrspace *as)
 {
 	KASSERT(as != NULL);	
@@ -314,34 +335,34 @@ as_destroy(struct addrspace *as)
 	struct page_table_entry* next = NULL;
 	if(use_big_lock == true && swapping_started == true)
 		lock_acquire(as_lock);
-	else if(use_big_lock == false && swapping_started == true)
+	else if(use_small_lock == true && swapping_started == true)
 		lock_acquire(as->as_lock);
-//	spinlock_acquire(as->as_splock);
+	//	spinlock_acquire(as->as_splock);
 	while(cur != NULL)
 	{
 		next = cur->next;
 		KASSERT(cur->page_state != SWAPPING);
 		while(cur->page_state == SWAPPING)
 		{
-		//	if(spinlock_do_i_hold(as->as_splock))
-		//		spinlock_release(as->as_splock);
+			//	if(spinlock_do_i_hold(as->as_splock))
+			//		spinlock_release(as->as_splock);
 			thread_yield();
 		}
 
-	//	if(!spinlock_do_i_hold(as->as_splock))
-	//		spinlock_acquire(as->as_splock);
+		//	if(!spinlock_do_i_hold(as->as_splock))
+		//		spinlock_acquire(as->as_splock);
 
 		bool is_swapped = false;
 		if(cur->page_state == SWAPPED)
 		{
-		//	kprintf("as destroy , swapped is true \n");
+			//	kprintf("as destroy , swapped is true \n");
 			is_swapped = true;
 		}	
 		free_user_page(cur->vaddr,cur->paddr,as, false, is_swapped, cur->swap_pos);
 		kfree(cur);
 		cur = next;
 	}
-//	page_list_delete(&(as->as_page_list));
+	//	page_list_delete(&(as->as_page_list));
 	as->as_page_list = NULL;
 
 	//this is straight forward though.
@@ -349,18 +370,18 @@ as_destroy(struct addrspace *as)
 	as->as_region_list = NULL;
 	if(use_big_lock == true && swapping_started == true)
 		lock_release(as_lock);
-	else if(use_big_lock == false && swapping_started == true)
+	else if(use_small_lock == true && swapping_started == true)
 	{
 		lock_release(as->as_lock);
 		lock_destroy(as->as_lock);
 	}
-//	spinlock_release(as->as_splock);
-//	spinlock_cleanup(as->as_splock);
-//	kfree(as->as_splock);
+	//	spinlock_release(as->as_splock);
+	//	spinlock_cleanup(as->as_splock);
+	//	kfree(as->as_splock);
 	kfree(as);
 }
 
-void
+	void
 as_activate(void)
 {
 	struct addrspace *as;
@@ -388,7 +409,7 @@ as_activate(void)
 	splx(spl);
 }
 
-void
+	void
 as_deactivate(void)
 {
 	/*
@@ -408,9 +429,9 @@ as_deactivate(void)
  * moment, these are ignored. When you write the VM system, you may
  * want to implement them.
  */
-int
+	int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-		 int readable, int writeable, int executable)
+		int readable, int writeable, int executable)
 {
 	/*
 	 * Write this.
@@ -427,7 +448,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	/* ...and now the length. */
 	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
 
-  // Should check for overlaps too.but how
+	// Should check for overlaps too.but how
 	size_t npages = memsize / PAGE_SIZE;
 
 	struct as_region* temp = (struct as_region*)kmalloc(sizeof(struct as_region));
@@ -437,7 +458,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		temp->can_read = 1;
 	else
 		temp->can_read = 0;
-	
+
 	if(writeable == 2)
 		temp->can_write = 1;
 	else
@@ -460,14 +481,14 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		as->as_heap_end = as->as_heap_start; // just initializing, subsequent calls to sbrk will alter this value.
 	}
 
-    int ret = region_list_add_node(&(as->as_region_list), temp);
+	int ret = region_list_add_node(&(as->as_region_list), temp);
 	if(ret == -1)
 		return ENOMEM;
 
 	return 0;
 }
 
-int
+	int
 as_prepare_load(struct addrspace *as)
 {
 	/*
@@ -475,21 +496,21 @@ as_prepare_load(struct addrspace *as)
 	 */
 	if(as == NULL)
 		return EINVAL;
-	
+
 	struct as_region *temp = as->as_region_list;
 	if(temp == NULL)
 		return EINVAL;
-	
+
 	while(temp != NULL)
 	{
 		temp->can_write = 1; // doing this so that the segments can be loaded into memory. will set it back to proper values in as_complete_load.
 		temp = temp->next;
 	}
-	
+
 	return 0;
 }
 
-int
+	int
 as_complete_load(struct addrspace *as)
 {
 	/*
@@ -497,11 +518,11 @@ as_complete_load(struct addrspace *as)
 	 */
 	if(as == NULL)
 		return EINVAL;
-	
+
 	struct as_region *temp = as->as_region_list;
 	if(temp == NULL)
 		return EINVAL;
-	
+
 	while(temp != NULL)
 	{
 
@@ -512,7 +533,7 @@ as_complete_load(struct addrspace *as)
 	return 0;
 }
 
-int
+	int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	/*

@@ -145,6 +145,7 @@ boot(void)
 	COMPILE_ASSERT(sizeof(*(userptr_t)0) == sizeof(char));
 
 	open_swap_disk();
+	create_coremap_locks();
 }
 
 /*

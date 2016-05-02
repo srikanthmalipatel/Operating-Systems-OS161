@@ -81,6 +81,7 @@ typedef enum state
     unsigned int chunks : 7;
 	struct addrspace* as;
 	unsigned int is_victim : 1;
+	struct lock* page_lock;
 
  };
 
@@ -119,6 +120,7 @@ void free_heap(intptr_t amount);
  */
 unsigned int coremap_used_bytes(void);
 void open_swap_disk(void);
+void create_coremap_locks(void);
 
 unsigned int coremap_free_bytes(void);
 /* TLB shootdown handling called from interprocessor_interrupt */
