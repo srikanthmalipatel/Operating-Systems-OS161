@@ -761,8 +761,10 @@ void free_user_page(vaddr_t vaddr,paddr_t paddr, struct addrspace* as, bool free
 
 	spinlock_release(cm_splock);
 		const struct tlbshootdown tlb = {vaddr};
-		vm_tlbshootdown(&tlb);
-		ipi_tlbshootdown_all_cpus(&tlb);
+		if(swapping_started == false)
+			vm_tlbshootdown(&tlb);
+		else
+			ipi_tlbshootdown_all_cpus(&tlb);
 	//ipi_broadcast(IPI_TLBSHOOTDOWN);
 
 	if(free_node == true)
