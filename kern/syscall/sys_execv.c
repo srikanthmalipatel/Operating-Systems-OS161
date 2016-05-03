@@ -52,10 +52,6 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
         return EINVAL;
     }
 	if(swapping_started == true) {
-        if(strcmp(_progname, "/testbin/bigfork") == 0) {
-            kfree(_progname);
-            return EINVAL;
-        }
     }
     kfree(_progname);
 
