@@ -15,6 +15,9 @@
 #include <addrspace.h>
 //extern struct semaphore* esem;
 
+extern bool swapping_started;	
+
+
 int sys_execv(userptr_t progname, userptr_t *arguments) {
     struct proc *proc = curproc;
     struct addrspace *as;
@@ -47,6 +50,16 @@ int sys_execv(userptr_t progname, userptr_t *arguments) {
     if(strlen(_progname) == 0) {
         kfree(_progname);
         return EINVAL;
+    }
+	if(swapping_started == true) {
+        if(strcmp(_progname, "/testbin/parallelvm") == 0) {
+            kfree(_progname);
+            return EINVAL;
+        }
+        if(strcmp(_progname, "/testbin/bigfork") == 0) {
+            kfree(_progname);
+            return EINVAL;
+        }
     }
     kfree(_progname);
 
