@@ -1166,7 +1166,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		//simple case. just update the tlb entry.
 
-	/	KASSERT(page_state != SWAPPING);
+		KASSERT(page->page_state != SWAPPING);
 
 		while(page->page_state == SWAPPING)
 		{
