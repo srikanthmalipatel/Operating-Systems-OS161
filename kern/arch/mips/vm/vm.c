@@ -87,9 +87,9 @@ vaddr_t copy_buffer_vaddr = 0;
 uint32_t last_swapped = 0;
 bool swapping_started = false;
 extern struct lock* as_lock;
-bool use_big_lock = false;
+bool use_big_lock = true;
 bool use_small_lock = false;
-bool use_page_lock = true;
+bool use_page_lock = false;
 struct lock* victim_lock = NULL;
 
 const char swap_disk_name[] = "lhd0raw:";
@@ -203,23 +203,26 @@ static uint32_t get_swap_victim_index(unsigned long npages, vaddr_t vaddr)
 {
 	//random page replacement algorithm
 	KASSERT(npages == 1);
-	if(use_big_lock == true && swapping_started == true)
-		spinlock_acquire(cm_splock);
+//	if(use_big_lock == true && swapping_started == true)
+//		spinlock_acquire(cm_splock);
 
-	lock_acquire(victim_lock);
+//	lock_acquire(victim_lock);
 
 	uint32_t index = random() % coremap_count;
 	while(!is_swap_candidate(index,vaddr))
 		index = random() % coremap_count;
 
-	if(use_page_lock == true && swapping_started == true)
-	lock_acquire(coremap[index].page_lock);
 	coremap[index].is_victim = true;
 
-	lock_release(victim_lock);
+	if(use_page_lock == true && swapping_started == true)
+		lock_acquire(coremap[index].page_lock);
+	
+//	coremap[index].is_victim = true;
 
-	if(use_big_lock == true && swapping_started == true)
-	spinlock_release(cm_splock);
+//	lock_release(victim_lock);
+
+//	if(use_big_lock == true && swapping_started == true)
+//	 spinlock_release(cm_splock);
 	return index;
 
 }
@@ -553,14 +556,6 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 		//	spinlock_acquire(cm_splock);
 		KASSERT(npages == 1);
 
-		// select a candidate and mark it as victim
-
-		uint32_t victim = get_swap_victim_index(npages,vaddr);
-		//	kprintf("got victim : %d \n", victim);
-		KASSERT(victim != 0);
-		struct addrspace* victim_as = coremap[victim].as;
-		//	bool already_held = false;
-
 		bool already_held =false;
 		if(use_big_lock == true && swapping_started == true)
 		{
@@ -569,6 +564,23 @@ getppages(unsigned long npages, bool is_user_page, vaddr_t vaddr, bool is_swap_i
 			else
 				already_held = true;
 		}
+
+		// select a candidate and mark it as victim
+
+		uint32_t victim = get_swap_victim_index(npages,vaddr);
+		//	kprintf("got victim : %d \n", victim);
+		KASSERT(victim != 0);
+		struct addrspace* victim_as = coremap[victim].as;
+		//	bool already_held = false;
+
+	/*	bool already_held =false;
+		if(use_big_lock == true && swapping_started == true)
+		{
+			if(lock_do_i_hold(as_lock) == false)
+				lock_acquire(as_lock);
+			else
+				already_held = true;
+		}*/
 
 		if(use_small_lock == true && swapping_started == true)
 		{
@@ -1154,7 +1166,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		//simple case. just update the tlb entry.
 
-	//	KASSERT(page_state != SWAPPING);
+	/	KASSERT(page_state != SWAPPING);
 
 		while(page->page_state == SWAPPING)
 		{
@@ -1246,6 +1258,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			else
 			{
 			
+				if(use_page_lock == true && swapping_started == true)
+				{
+					if(lock_do_i_hold(coremap[(page->paddr)/PAGE_SIZE].page_lock) == true)
+						lock_release(coremap[(page->paddr)/PAGE_SIZE].page_lock);
+				}
 			  KASSERT(page->page_state != SWAPPING);
 			  page->page_state = SWAPPED;
 			
@@ -1263,7 +1280,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			}
 			paddr_t paddr = swap_in(faultaddress,as,0,page->swap_pos);
 			//	spinlock_acquire(as->as_splock);
+		//	KASSERT(lock_do_i_hold(coremap[paffr/PAGE_SIZE]) == true);
 			bool already_held = false;
+
 			if(use_small_lock == true && swapping_started == true)
 			{
 				if(lock_do_i_hold(as->as_lock) == false)
@@ -1277,6 +1296,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			}
 			else if(use_big_lock == true && swapping_started == true)
 			{
+				KASSERT(lock_do_i_hold(as_lock) == true);
 				if(lock_do_i_hold(as_lock) == false)
 				{	
 					held_now = true;
@@ -1327,7 +1347,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 				
 				if(use_page_lock == true && swapping_started == true)
-					lock_release(coremap[(page->paddr)/PAGE_SIZE].page_lock);
+				{
+					if(lock_do_i_hold(coremap[(page->paddr)/PAGE_SIZE].page_lock) == true)
+						lock_release(coremap[(page->paddr)/PAGE_SIZE].page_lock);
+				}
 
 				return 0;
 			}
@@ -1388,6 +1411,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(use_big_lock == true  && swapping_started == true)
 	{
+		KASSERT(lock_do_i_hold(as_lock) == true);
 		if(lock_do_i_hold(as_lock) == false)
 		{	
 			lock_acquire(as_lock);
@@ -1419,14 +1443,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// add this to the page table
 	int i = page_list_add_node(&as->as_page_list, p);
 
-	if(already_held == false || held_now == true)
+/*	if(already_held == false || held_now == true)
 	{
 		if(use_big_lock == true && swapping_started == true)
 			lock_release(as_lock);
 		else if(use_small_lock == true && swapping_started == true)
 			lock_release(as->as_lock);
 
-	}
+	}*/
 	if(i == -1)
 	{
 		lock_release(as->as_lock);
@@ -1474,6 +1498,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	tlb_random(ehi, elo);
 	splx(spl);
 	spinlock_release(tlb_splock);
+
+
+	if(already_held == false || held_now == true)
+	{
+		if(use_big_lock == true && swapping_started == true)
+			lock_release(as_lock);
+		else if(use_small_lock == true && swapping_started == true)
+			lock_release(as->as_lock);
+
+	}
 
 	if(use_page_lock == true && swapping_started == true)
 	{

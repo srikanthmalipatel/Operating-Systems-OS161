@@ -322,6 +322,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		lock_release(old->as_lock);
 		lock_release(newas->as_lock);
 	}
+
+//	kprintf("exiting as copy \n");
 	//	spinlock_release(old->as_splock);
 	//	spinlock_release(newas->as_splock);
 	return 0;
@@ -338,6 +340,7 @@ as_destroy(struct addrspace *as)
 	else if(use_small_lock == true && swapping_started == true)
 		lock_acquire(as->as_lock);
 	//	spinlock_acquire(as->as_splock);
+//	kprintf("as_destory called \n");
 	while(cur != NULL)
 	{
 		next = cur->next;
@@ -357,8 +360,11 @@ as_destroy(struct addrspace *as)
 		{
 			//	kprintf("as destroy , swapped is true \n");
 			is_swapped = true;
-		}	
+		}
+
+	//	kprintf("calling free user page \n");
 		free_user_page(cur->vaddr,cur->paddr,as, false, is_swapped, cur->swap_pos);
+	//	kprintf("got out of free user page \n");
 		kfree(cur);
 		cur = next;
 	}
