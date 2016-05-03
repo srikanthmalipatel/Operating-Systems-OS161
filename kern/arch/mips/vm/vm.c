@@ -1480,6 +1480,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		splx(spl);
 		spinlock_release(tlb_splock);
 
+
+		if(already_held == false || held_now == true)
+		{
+			if(use_big_lock == true && swapping_started == true)
+				lock_release(as_lock);
+			else if(use_small_lock == true && swapping_started == true)
+				lock_release(as->as_lock);
+
+		}
+
 		if(use_page_lock == true && swapping_started == true)
 		{
 			if(lock_do_i_hold(coremap[p->paddr/PAGE_SIZE].page_lock) == true)
